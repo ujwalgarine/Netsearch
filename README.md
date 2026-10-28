@@ -1,12 +1,14 @@
 # Network prototype
 
-Chat with an LLM about who you are and what you want, and watch a branching map of people to network with grow next to the chat. Click any connection for why they matter, talking points, and a LinkedIn search link.
+Chat with an LLM about who you are and what you want, and watch a branching map of real people to network with grow next to the chat. Click anyone for a summary of their background, why they're worth meeting, what you have in common, talking points, and a link to their actual profile.
 
 ## Run it
 
 You need [Node.js](https://nodejs.org) 18 or newer.
 
-1. Open `.env` and replace `sk-your-key-here` with your OpenAI API key.
+1. Open `.env` and set:
+   - `OPENAI_API_KEY`: plans the branches and writes details and talking points.
+   - `EXA_API_KEY`: finds real people. Create a free key at [dashboard.exa.ai/api-keys](https://dashboard.exa.ai/api-keys). The free tier gives $10 of credits every month, no card needed.
 2. In this folder, run:
 
    ```bash
@@ -16,26 +18,46 @@ You need [Node.js](https://nodejs.org) 18 or newer.
 
 3. Open http://localhost:3000
 
-No key yet? It still runs with demo data (you'll see a "demo data" badge), so you can try the interface first.
+No keys yet? It still runs with demo data (you'll see a "demo data" badge), so you can try the interface first. With only the OpenAI key, branches are planned but people search is off (you'll see a "people search off" badge).
+
+## Shaping the map
+
+The chat gets you a first map; after that you can edit it directly.
+
+- **Edit a branch:** click its diamond or label. Rename it, change why it matters, or change **Who to find** (the plain-English people search), then **Save & search again**. **Find 4 more** adds people without replacing the ones you have.
+- **New branch:** click **+ New branch** on the map (or **+ Branch** in the toolbar), name it, and describe who to find.
+- **Merge branches:** drag one branch onto another, or use **Merge** in the toolbar to pick two or more. People are combined and duplicates removed.
+- **Move or remove people:** drag a person card onto another branch, or use **Move to branch…** / **Remove from map** in their panel.
+- **Your goal and background:** click the goal at the root. **About you** is what talking points and shared ties are based on.
+- **Undo:** the toolbar button or Ctrl/Cmd+Z undoes any edit.
+- Chat follow-ups ("add a branch for design-to-PM switchers", "drop the recruiters") build on your edited map instead of replacing it.
+- The map is saved in your browser, so a reload picks up where you left off.
 
 ## How it works
 
 ```
 public/index.html   chat panel + map layout
 public/styles.css   all styling
-public/app.js       chat logic and the D3 branching map
-server.js           Express server; calls OpenAI and keeps your key off the browser
-mock.js             demo map used when no key is set
-.env                your API key, model, and port (never commit this)
+public/app.js       chat, map editing, and the D3 branching map
+server.js           Express server; keeps your API keys off the browser
+people.js           Exa people search + talking points grounded in each profile
+mock.js             demo data used when no OpenAI key is set
+.env                your API keys, model, and port (never commit this)
 ```
 
-- The browser sends the conversation to `POST /api/network`.
-- The server asks OpenAI for a **structured JSON map**: a goal, 3-5 branches (categories of people), and 2-4 connections per branch, each with a reason, talking points, and a search query.
-- The browser draws it as a tree: goal → branches → connections. Follow-up messages ("focus on Seattle", "add design roles") redraw the full map.
+1. `POST /api/plan`: the model turns the conversation (and the current, possibly hand-edited map) into branches. Each branch has a plain-English people search. The model never names people itself.
+2. `POST /api/people`: for each branch, [Exa](https://exa.ai) people search returns real public profiles (name, role, work history, education, profile URL, profile text). The model then reads those profiles and writes the summary, why reach out, what's in common, and talking points, using only facts on the profile. Company pages and poor fits are dropped.
 
-To change the model, edit `OPENAI_MODEL` in `.env`. The prompt and JSON shape live at the top of `server.js`.
+Branches fill in one at a time as their searches finish. A map of four branches costs roughly 4 Exa searches (about $0.01 each) plus one OpenAI call per branch.
 
-## Notes for the next version
+To change the model, edit `OPENAI_MODEL` in `.env`. The planner prompt lives in `server.js`; the profile prompt lives in `people.js`.
 
-- **Real people.** An LLM alone can't reliably return real, current people, so connections are specific *profiles* to search for (role + org + shared tie). Returning actual named people means plugging in a people-data source and having the model rank those results.
-- **Coffee-chat practice.** The "Practice coffee chat" button in the detail panel is the placeholder for the agent that role-plays the selected connection. Each connection already carries the context that agent would need.
+## Limits worth knowing
+
+- Results are public profiles Exa has indexed. Coverage is strong for working professionals and thinner for students and very new grads.
+- Profiles can be out of date. Check the linked profile before reaching out.
+- Most links go to LinkedIn, but some go to personal sites or other profile pages; the button says which.
+
+## Next
+
+- **Coffee-chat practice.** The "Practice coffee chat" button in the person panel is the placeholder for an agent that role-plays the selected person. Each person already carries the profile context that agent would need.

@@ -14,14 +14,14 @@
     <!-- Chat column -->
     <section class="chat" aria-label="Chat">
       <header class="brand">
-        <h1><span id="app-name">NetPrep</span><span class="tag">prototype</span></h1>
+        <h1><span id="app-name">Netsearch</span><span class="tag">prototype</span></h1>
         <span id="mode-badge" class="badge" hidden>demo data</span>
       </header>
 
       <div id="messages" class="messages" aria-live="polite">
         <div class="intro">
           <p class="intro-lead">Tell me who you are and who you want to meet.</p>
-          <p class="intro-sub">I'll map the people worth reaching out to, with talking points for each.</p>
+          <p class="intro-sub">I'll map real people worth reaching out to, with details and talking points for each. Then shape the branches yourself: rename, add, merge, and move people around.</p>
           <div class="chips" id="chips">
             <button class="chip">I'm a UW Informatics freshman aiming for a PM internship at Microsoft</button>
             <button class="chip">I want to break into climate tech as a data analyst in Seattle</button>
@@ -43,6 +43,9 @@
       <div class="map-toolbar">
         <span class="map-title" id="map-title">Network map</span>
         <div class="map-actions">
+          <button id="undo" class="ghost" disabled title="Undo (Ctrl/Cmd+Z)">Undo</button>
+          <button id="add-branch" class="ghost" disabled>+ Branch</button>
+          <button id="merge" class="ghost" disabled>Merge</button>
           <button id="fit" class="ghost" disabled>Fit</button>
           <button id="reset" class="ghost" disabled>New map</button>
         </div>
@@ -60,8 +63,9 @@
       </div>
 
       <svg id="graph" class="graph" role="img" aria-label="Branching map of suggested connections"></svg>
+      <div id="drag-hint" class="drag-hint" hidden></div>
 
-      <aside id="detail" class="detail" aria-hidden="true">
+      <aside id="detail" class="detail" aria-hidden="true" inert>
         <button id="detail-close" class="detail-close" aria-label="Close">×</button>
         <div id="detail-body"></div>
       </aside>
