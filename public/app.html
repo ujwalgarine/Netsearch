@@ -2,77 +2,97 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Network Prototype</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>NetPrep</title>
+  <meta name="theme-color" content="#070806" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500&family=Instrument+Serif:ital@1&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/light/style.css" />
+  <link rel="stylesheet" href="/tokens.css" />
+  <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <div class="app">
-    <!-- Chat column -->
-    <section class="chat" aria-label="Chat">
-      <header class="brand">
-        <h1><span id="app-name">Netsearch</span><span class="tag">prototype</span></h1>
-        <span id="mode-badge" class="badge" hidden>demo data</span>
-      </header>
+    <!-- Top bar -->
+    <header class="topbar">
+      <button id="chat-toggle" class="icon-btn" aria-controls="chat" aria-expanded="true" aria-label="Hide chat" title="Hide chat (\)"><i class="ph-light ph-sidebar-simple" aria-hidden="true"></i></button>
+      <a class="logo" href="/"><span class="logo-mark" aria-hidden="true"></span><span id="app-name">NetPrep</span></a>
+      <span class="topbar-goal label" id="map-title">No map yet</span>
+      <span id="mode-badge" class="badge label" hidden>Demo data</span>
+      <div class="toolbar" role="toolbar" aria-label="Map tools">
+        <button id="undo" class="mono-btn" disabled title="Undo (Ctrl/Cmd+Z)"><i class="ph-light ph-arrow-counter-clockwise" aria-hidden="true"></i>Undo</button>
+        <button id="add-branch" class="mono-btn" disabled><i class="ph-light ph-plus" aria-hidden="true"></i>Branch</button>
+        <button id="merge" class="mono-btn" disabled><i class="ph-light ph-git-merge" aria-hidden="true"></i>Merge</button>
+        <button id="reset" class="mono-btn" disabled>New map</button>
+      </div>
+    </header>
 
-      <div id="messages" class="messages" aria-live="polite">
-        <div class="intro">
-          <p class="intro-lead">Tell me who you are and who you want to meet.</p>
-          <p class="intro-sub">I'll map real people worth reaching out to, with details and talking points for each. Then shape the branches yourself: rename, add, merge, and move people around.</p>
-          <div class="chips" id="chips">
-            <button class="chip">I'm a UW Informatics freshman aiming for a PM internship at Microsoft</button>
-            <button class="chip">I want to break into climate tech as a data analyst in Seattle</button>
-            <button class="chip">I'm starting an edtech company and need advisors and early users</button>
+    <div class="workspace">
+      <!-- Chat column -->
+      <section class="chat" id="chat" aria-label="Chat">
+        <button id="chat-rail" class="chat-rail" aria-label="Show chat" title="Show chat (\)">
+          <i class="ph-light ph-chat-circle-text" aria-hidden="true"></i>
+          <span id="chat-unread" class="unread" hidden></span>
+        </button>
+        <div class="chat-head">
+          <span class="label">Conversation</span>
+          <button id="chat-expand" class="icon-btn" aria-pressed="false" aria-label="Widen chat" title="Widen chat"><i class="ph-light ph-arrows-out-line-horizontal" aria-hidden="true"></i></button>
+        </div>
+        <button id="show-earlier" class="show-earlier label" hidden></button>
+        <div id="messages" class="messages" aria-live="polite">
+          <div class="intro">
+            <p class="intro-lead">Who do you want to <span class="accent">meet</span>?</p>
+            <p class="intro-sub">Tell me who you are and what you're after. I'll find real people worth reaching out to, with talking points for each. Then shape the branches yourself.</p>
+            <div class="chips">
+              <button class="chip">I'm a UW Informatics freshman aiming for a PM internship at Microsoft</button>
+              <button class="chip">I want to break into climate tech as a data analyst in Seattle</button>
+              <button class="chip">I'm starting an edtech company and need advisors and early users</button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <form id="composer" class="composer">
-        <textarea id="input" rows="2" placeholder="Describe your goal…" aria-label="Message"></textarea>
-        <button id="send" type="submit" aria-label="Send">
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 12h14M12 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-      </form>
-    </section>
+        <form id="composer" class="composer">
+          <label class="sr-only" for="input">Message</label>
+          <textarea id="input" name="message" rows="1" autocomplete="off" placeholder="Describe your goal…"></textarea>
+          <button id="send" type="submit" aria-label="Send"><i class="ph-light ph-arrow-right" aria-hidden="true"></i></button>
+        </form>
+        <div id="chat-resize" class="resize-handle" role="separator" aria-orientation="vertical" aria-controls="chat" aria-label="Resize chat" title="Drag to resize. Double-click to reset." tabindex="0"></div>
+      </section>
 
-    <!-- Map column -->
-    <section class="map" aria-label="Network map">
-      <div class="map-toolbar">
-        <span class="map-title" id="map-title">Network map</span>
-        <div class="map-actions">
-          <button id="undo" class="ghost" disabled title="Undo (Ctrl/Cmd+Z)">Undo</button>
-          <button id="add-branch" class="ghost" disabled>+ Branch</button>
-          <button id="merge" class="ghost" disabled>Merge</button>
-          <button id="fit" class="ghost" disabled>Fit</button>
-          <button id="reset" class="ghost" disabled>New map</button>
+      <!-- Map canvas -->
+      <section class="map" aria-label="Network map">
+        <canvas id="field" class="dot-field" aria-hidden="true"></canvas>
+
+        <div id="empty" class="empty">
+          <div class="empty-rings" aria-hidden="true"><span></span><span></span><i></i></div>
+          <p>Your network grows here.</p>
         </div>
-      </div>
 
-      <div id="empty" class="empty">
-        <svg viewBox="0 0 120 80" width="120" height="80" aria-hidden="true">
-          <circle cx="14" cy="40" r="5" />
-          <path d="M19 40 C 50 40, 50 14, 80 14 M19 40 L80 40 M19 40 C 50 40, 50 66, 80 66" />
-          <rect x="84" y="9" width="28" height="10" rx="2" />
-          <rect x="84" y="35" width="28" height="10" rx="2" />
-          <rect x="84" y="61" width="28" height="10" rx="2" />
-        </svg>
-        <p>Your network branches out here.</p>
-      </div>
+        <svg id="graph" class="graph" role="group" aria-label="Network map. Tab through branches and people; Enter opens details."></svg>
 
-      <svg id="graph" class="graph" role="img" aria-label="Branching map of suggested connections"></svg>
-      <div id="drag-hint" class="drag-hint" hidden></div>
+        <div class="map-controls" role="group" aria-label="Zoom">
+          <button id="zoom-in" class="icon-btn" aria-label="Zoom in" disabled><i class="ph-light ph-plus" aria-hidden="true"></i></button>
+          <button id="zoom-out" class="icon-btn" aria-label="Zoom out" disabled><i class="ph-light ph-minus" aria-hidden="true"></i></button>
+          <button id="fit" class="icon-btn" aria-label="Fit map to view" title="Fit map to view" disabled><i class="ph-light ph-corners-out" aria-hidden="true"></i></button>
+        </div>
+        <p id="map-count" class="map-count label" hidden></p>
+        <div id="drag-hint" class="drag-hint label" hidden></div>
+        <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-      <aside id="detail" class="detail" aria-hidden="true" inert>
-        <button id="detail-close" class="detail-close" aria-label="Close">×</button>
-        <div id="detail-body"></div>
-      </aside>
-    </section>
+        <div id="detail-resize" class="resize-handle detail-resize" role="separator" aria-orientation="vertical" aria-controls="detail" aria-label="Resize details panel" title="Drag to resize. Double-click to reset." tabindex="0"></div>
+        <aside id="detail" class="detail" aria-hidden="true" inert>
+          <div class="sheet-handle" aria-hidden="true"></div>
+          <button id="detail-expand" class="detail-expand icon-btn" aria-pressed="false" aria-label="Widen panel" title="Widen panel"><i class="ph-light ph-arrows-out-line-horizontal" aria-hidden="true"></i></button>
+          <button id="detail-close" class="detail-close" aria-label="Close"><i class="ph-light ph-x" aria-hidden="true"></i></button>
+          <div id="detail-body"></div>
+        </aside>
+      </section>
+    </div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-  <script src="app.js"></script>
+  <script src="/field.js"></script>
+  <script src="/app.js"></script>
 </body>
 </html>

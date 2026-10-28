@@ -1,0 +1,284 @@
+/* "Moss & Signal": shared tokens and primitives for the landing page and the app.
+   Source of truth: design inspiration/design.md, section 3. */
+
+:root {
+  /* Surfaces (darkest to lightest) */
+  --bg-0: #070806;
+  --bg-1: #0e100c;
+  --bg-2: #151811;
+  --bg-3: #1d2117;
+
+  /* Glass */
+  --glass: rgba(22, 26, 18, 0.55);
+  --glass-strong: rgba(26, 31, 21, 0.78);
+  --glass-blur: 18px;
+
+  /* Lines */
+  --line: rgba(230, 240, 210, 0.10);
+  --line-strong: rgba(230, 240, 210, 0.22);
+  --line-signal: rgba(200, 241, 105, 0.55);
+
+  /* Text */
+  --text-1: #eef0e6;
+  --text-2: #a9ad9d;
+  --text-3: #7f8373;
+
+  /* Moss (atmosphere, never text) */
+  --moss-glow: #4a5a22;
+  --moss-deep: #222a13;
+  --moss-mid: #5f7a2c;
+
+  /* Signal (the one accent) */
+  --signal: #c8f169;
+  --signal-soft: #e6f7b0;
+  --signal-dim: #8fae4f;
+  --on-signal: #0b0d07;
+
+  /* Data */
+  --up: #a6e07a;
+  --down: #e8735a;
+
+  /* Type */
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --font-accent: 'Instrument Serif', Georgia, serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+
+  /* Radius */
+  --r-xs: 4px;
+  --r-sm: 8px;
+  --r-md: 14px;
+  --r-lg: 22px;
+  --r-pill: 999px;
+
+  /* Glow */
+  --glow-signal: 0 0 0 1px rgba(200, 241, 105, .35), 0 8px 32px -6px rgba(200, 241, 105, .45);
+  --glow-node: 0 0 18px rgba(200, 241, 105, .55);
+  --shadow-panel: 0 30px 80px -30px rgba(0, 0, 0, .8);
+
+  /* Motion */
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+  --t-fast: 160ms;
+  --t-base: 320ms;
+  --t-slow: 700ms;
+
+  color-scheme: dark;
+}
+
+/* ---------- Base ---------- */
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  touch-action: manipulation;
+  margin: 0;
+  background: var(--bg-0);
+  color: var(--text-1);
+  font-family: var(--font-display);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Grain: fixed, non-interactive, never on a scrolling layer. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+a { color: inherit; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:disabled { cursor: default; }
+img { max-width: 100%; display: block; }
+
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
+h1, h2, h3 { text-wrap: balance; }
+::selection { background: rgba(200, 241, 105, .28); color: var(--text-1); }
+
+/* ---------- Type helpers ---------- */
+
+.accent {
+  font-family: var(--font-accent);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.05em;
+  letter-spacing: -0.01em;
+  color: var(--signal);
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--text-3);
+}
+
+/* ---------- Buttons (design.md 6.2) ---------- */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 24px;
+  border-radius: var(--r-pill);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: transform var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out),
+    background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.pill .arrow { display: inline-block; transition: transform var(--t-fast) var(--ease-out); }
+.pill:hover .arrow { transform: translateX(3px); }
+.pill:active { transform: translateY(1px); }
+.pill.sm { height: 38px; padding: 0 16px; font-size: 14px; }
+
+.pill-primary {
+  background: linear-gradient(180deg, var(--signal-soft), var(--signal));
+  color: var(--on-signal);
+  box-shadow: var(--glow-signal);
+}
+.pill-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px rgba(200, 241, 105, .45), 0 10px 40px -6px rgba(200, 241, 105, .6);
+}
+.pill-primary:disabled { opacity: .45; transform: none; box-shadow: none; }
+
+.pill-ghost {
+  background: transparent;
+  color: var(--text-1);
+  border-color: var(--line-strong);
+}
+.pill-ghost:hover:not(:disabled) { background: var(--bg-3); }
+.pill-ghost:disabled { color: var(--text-3); border-color: var(--line); }
+
+.mono-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--r-xs);
+  border: 0;
+  background: var(--bg-3);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.mono-btn:hover:not(:disabled) { color: var(--text-1); background: #262b1e; }
+.mono-btn:disabled { opacity: .4; }
+.mono-btn.light { background: var(--text-1); color: var(--bg-0); }
+.mono-btn.light:hover { background: #fff; color: var(--bg-0); }
+
+/* Icon-only button: 36px target, quiet until hovered. Always give it an aria-label. */
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 18px;
+  list-style: none;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+.icon-btn::-webkit-details-marker { display: none; }
+.icon-btn:hover:not(:disabled) { background: var(--bg-3); color: var(--text-1); }
+.icon-btn:disabled { opacity: .35; }
+
+/* ---------- Surfaces ---------- */
+
+.glass {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+
+/* Ring mark: the dot-in-circle from the outline cards (6.4). */
+.ring-mark {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.ring-mark::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-1);
+  transition: background var(--t-fast), box-shadow var(--t-fast);
+}
+.ring-mark.on::after { background: var(--signal); box-shadow: var(--glow-node); }
+
+/* Logo mark: the product's root node, two rings around a lit dot. */
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-1);
+}
+.logo-mark {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--line-signal);
+  display: grid;
+  place-items: center;
+}
+.logo-mark::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: var(--glow-node);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass { background: var(--bg-2); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}

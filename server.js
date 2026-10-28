@@ -20,7 +20,10 @@ const hasExa = Boolean(exaKey) && !exaKey.startsWith('your-');
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+const publicDir = path.join(__dirname, 'public');
+app.get('/', (_req, res) => res.sendFile(path.join(publicDir, 'landing.html')));
+app.get('/app', (_req, res) => res.sendFile(path.join(publicDir, 'app.html')));
+app.use(express.static(publicDir, { index: false }));
 
 // ---------------------------------------------------------------------------
 // Planning: the model decides the branches (categories of people) and how to
@@ -193,7 +196,7 @@ function sendError(res, err) {
 }
 
 app.listen(PORT, () => {
-  console.log(`\n  Network prototype running at http://localhost:${PORT}`);
+  console.log(`\n  Network prototype running at http://localhost:${PORT} (app at /app)`);
   if (!openai) {
     console.log('  No OpenAI key found: running with demo data. Add your key to .env and restart.\n');
   } else {

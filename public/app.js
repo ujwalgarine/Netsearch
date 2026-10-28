@@ -23,6 +23,7 @@ const els = {
   send: $('send'),
   empty: $('empty'),
   mapTitle: $('map-title'),
+  mapCount: $('map-count'),
   undo: $('undo'),
   addBranch: $('add-branch'),
   merge: $('merge'),
@@ -32,10 +33,18 @@ const els = {
   detail: $('detail'),
   detailBody: $('detail-body'),
   detailClose: $('detail-close'),
+  workspace: document.querySelector('.workspace'),
+  chatToggle: $('chat-toggle'),
+  chatRail: $('chat-rail'),
+  chatUnread: $('chat-unread'),
+  showEarlier: $('show-earlier'),
+  zoomIn: $('zoom-in'),
+  zoomOut: $('zoom-out'),
+  toast: $('toast'),
 };
 
 els.appName.textContent = APP_NAME;
-document.title = `${APP_NAME} · prototype`;
+document.title = APP_NAME;
 
 const uid = () => `b${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 const findBranch = (id) => state.map?.branches.find((b) => b.id === id);
@@ -64,7 +73,7 @@ fetch('/api/status')
       els.badge.title = 'No OpenAI key found. Add it to .env and restart the server.';
     } else if (!s.people) {
       els.badge.hidden = false;
-      els.badge.textContent = 'people search off';
+      els.badge.textContent = 'People search off';
       els.badge.title = 'Add EXA_API_KEY to .env and restart the server to find real people.';
     }
   })
@@ -96,18 +105,102 @@ els.fit.addEventListener('click', () => {
   autoFit = true;
   fitToView(true);
 });
+els.zoomIn.addEventListener('click', () => zoomBy(1.25));
+els.zoomOut.addEventListener('click', () => zoomBy(0.8));
 els.undo.addEventListener('click', undo);
 els.addBranch.addEventListener('click', openNewBranch);
 els.merge.addEventListener('click', () => openMerge([]));
 els.detailClose.addEventListener('click', dismissDetail);
+els.chatToggle.addEventListener('click', () => setChatCollapsed(!chatCollapsed));
+els.chatRail.addEventListener('click', () => setChatCollapsed(false));
+els.showEarlier.addEventListener('click', () => {
+  historyExpanded = true;
+  compactHistory();
+});
+
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') dismissDetail();
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
+  if (e.key === 'Escape') {
+    if (closeMenus()) return;
+    dismissDetail();
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey && !typing) {
     e.preventDefault();
     undo();
+    return;
+  }
+  if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === '\\') {
+    e.preventDefault();
+    setChatCollapsed(!chatCollapsed);
+  }
+  // Step through people while a person is open (unless a map node has focus; arrows collapse branches there).
+  const onNode = document.activeElement?.closest?.('#graph');
+  if (state.view?.kind === 'person' && !onNode && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    e.preventDefault();
+    stepPerson(e.key === 'ArrowRight' ? 1 : -1);
   }
 });
+
+// Close any open overflow menu when clicking elsewhere.
+document.addEventListener('click', (e) => {
+  document.querySelectorAll('details.menu[open]').forEach((m) => !m.contains(e.target) && m.removeAttribute('open'));
+});
+
+function closeMenus() {
+  const open = [...document.querySelectorAll('details.menu[open]')];
+  open.forEach((m) => m.removeAttribute('open'));
+  return open.length > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Chat panel: collapsible, with older history folded away
+// ---------------------------------------------------------------------------
+
+const CHAT_KEY = 'netprep:chat-collapsed';
+const VISIBLE_MESSAGES = 4; // the latest exchange or two stay visible; older ones fold
+let chatCollapsed = false;
+let historyExpanded = false;
+
+function setChatCollapsed(on) {
+  chatCollapsed = on;
+  els.workspace.classList.toggle('chat-collapsed', on);
+  els.chatToggle.setAttribute('aria-expanded', String(!on));
+  els.chatToggle.setAttribute('aria-label', on ? 'Show chat' : 'Hide chat');
+  els.chatToggle.title = `${on ? 'Show' : 'Hide'} chat (\\)`;
+  if (!on) els.chatUnread.hidden = true;
+  try { localStorage.setItem(CHAT_KEY, on ? '1' : '0'); } catch {}
+}
+
+function compactHistory() {
+  const msgs = [...els.messages.querySelectorAll('.msg')];
+  const hide = historyExpanded ? 0 : Math.max(0, msgs.length - VISIBLE_MESSAGES);
+  msgs.forEach((m, i) => { m.hidden = i < hide; });
+  els.showEarlier.hidden = hide === 0;
+  els.showEarlier.textContent = `Show ${hide} earlier ${hide === 1 ? 'message' : 'messages'}`;
+}
+
+try { setChatCollapsed(localStorage.getItem(CHAT_KEY) === '1'); } catch {}
+
+// ---------------------------------------------------------------------------
+// Toast with undo: every destructive edit can be taken back from right here
+// ---------------------------------------------------------------------------
+
+let toastTimer = 0;
+function toast(message, { undoable = false } = {}) {
+  clearTimeout(toastTimer);
+  els.toast.innerHTML = '';
+  els.toast.append(el('span', null, message));
+  if (undoable) {
+    els.toast.append(button('Undo', 'toast-action', () => {
+      undo();
+      els.toast.hidden = true;
+    }));
+  }
+  els.toast.hidden = false;
+  toastTimer = setTimeout(() => { els.toast.hidden = true; }, undoable ? 6000 : 2400);
+}
 
 async function submit(raw) {
   const text = raw.trim();
@@ -189,7 +282,13 @@ function addMessage(kind, text, meta) {
     m.textContent = meta;
     div.appendChild(m);
   }
+  if (kind === 'assistant') {
+    els.messages.querySelectorAll('.msg.latest').forEach((m) => m.classList.remove('latest'));
+    div.classList.add('latest');
+    if (chatCollapsed) els.chatUnread.hidden = false;
+  }
   els.messages.appendChild(div);
+  compactHistory();
   els.messages.scrollTop = els.messages.scrollHeight;
 }
 
@@ -200,7 +299,8 @@ function setLoading(on) {
   if (on) {
     thinkingEl = document.createElement('div');
     thinkingEl.className = 'thinking';
-    thinkingEl.textContent = state.map ? 'Updating your branches…' : 'Planning your branches…';
+    thinkingEl.innerHTML = '<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>';
+    thinkingEl.append(el('span', 'label', state.map ? 'Updating your branches' : 'Mapping your network'));
     els.messages.appendChild(thinkingEl);
     els.messages.scrollTop = els.messages.scrollHeight;
   } else {
@@ -218,8 +318,10 @@ function resetAll() {
   nodeLayer.selectAll('*').remove();
   updateToolbar();
   els.empty.hidden = false;
-  els.mapTitle.textContent = 'Network map';
+  els.mapTitle.textContent = 'No map yet';
+  particleLayer.selectAll('*').remove();
   els.messages.innerHTML = '';
+  historyExpanded = false;
   try { localStorage.removeItem(STORE_KEY); } catch {}
   addMessage('assistant', 'Fresh start. Who do you want to meet?');
 }
@@ -324,9 +426,11 @@ function updateBranch(id, fields) {
 }
 
 function deleteBranch(id) {
+  const b = findBranch(id);
   snapshot();
-  state.map.branches = state.map.branches.filter((b) => b.id !== id);
+  state.map.branches = state.map.branches.filter((x) => x.id !== id);
   commit();
+  toast(`Deleted "${b.label}"`, { undoable: true });
 }
 
 function mergeBranches(ids, { label, query }) {
@@ -354,14 +458,17 @@ function mergeBranches(ids, { label, query }) {
   state.map.branches = state.map.branches.filter((b) => !ids.includes(b.id));
   state.map.branches.splice(at, 0, merged);
   commit();
+  toast(`Merged ${chosen.length} branches`, { undoable: true });
   return merged.id;
 }
 
 function removePerson(branchId, personId) {
   snapshot();
   const b = findBranch(branchId);
+  const person = b.people.find((p) => p.id === personId);
   b.people = b.people.filter((p) => p.id !== personId);
   commit();
+  toast(`Removed ${person?.name ?? 'person'}`, { undoable: true });
 }
 
 function movePerson(fromId, personId, toId) {
@@ -373,7 +480,9 @@ function movePerson(fromId, personId, toId) {
   from.people = from.people.filter((p) => p.id !== personId);
   to.people.push(person);
   to.error = null;
+  to.collapsed = false;
   commit();
+  toast(`Moved ${person.name} to ${to.label}`, { undoable: true });
   if (state.view?.personId === personId) state.view.branchId = toId;
   reopenDetail();
 }
@@ -405,7 +514,7 @@ function restore() {
   }
   document.querySelector('.intro')?.remove();
   state.messages.forEach((m) => addMessage(m.role === 'user' ? 'user' : 'assistant', m.content));
-  addMessage('assistant', 'Picked up where you left off.', 'saved in this browser');
+  toast('Restored your saved map');
   autoFit = true;
   render({ grow: true });
 }
@@ -415,8 +524,15 @@ function restore() {
 // ---------------------------------------------------------------------------
 
 const svg = d3.select('#graph');
+const defs = svg.append('defs');
+const glow = defs.append('radialGradient').attr('id', 'root-glow');
+glow.append('stop').attr('offset', '0%').attr('stop-color', '#4a5a22').attr('stop-opacity', 0.5);
+glow.append('stop').attr('offset', '100%').attr('stop-color', '#4a5a22').attr('stop-opacity', 0);
+
 const g = svg.append('g');
+const glowLayer = g.append('g').attr('class', 'root-glow'); // moss light behind the root, moves with the map
 const linkLayer = g.append('g');
+const particleLayer = g.append('g');
 const nodeLayer = g.append('g');
 let autoFit = true; // keep the whole map in view as it grows, until the user pans or zooms
 let lastRoot = null;
@@ -430,16 +546,32 @@ const zoom = d3
   });
 svg.call(zoom).on('dblclick.zoom', null);
 
-const CARD_W = 236;
-const CARD_H = 44;
+if (window.DotField) window.DotField(document.getElementById('field'), { crest: 0.72, rest: 0.07 });
+
+const CARD_W = 240;
+const CARD_H = 50;
+const PILL_H = 30;
+const COL = 340;   // horizontal distance between tree levels
 const STAGE = 450; // ms between tree levels growing in
 const MOVE = 420;  // ms for nodes sliding into new positions after an edit
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 const truncate = (s = '', n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const sibIndex = (d) => (d.parent ? d.parent.children.indexOf(d) : 0);
-const delayFor = (d) => (d.depth === 0 ? 0 : (d.depth - 1) * STAGE + sibIndex(d) * 70);
+const delayFor = (d) => (d.depth === 0 ? 0 : (d.depth - 1) * STAGE + sibIndex(d) * 60);
 const pos = (d) => `translate(${d.y},${d.x})`;
-const linkPath = d3.linkHorizontal().x((d) => d.y).y((d) => d.x);
+// Branch pills are as wide as their label (Geist Mono 11px + tracking is about 7.9px per character).
+const pillWidth = (label) => Math.round(Math.min(label.length, 26) * 7.9 + 92); // + room for the collapse toggle
+
+// Links leave from the right edge of a pill and arrive at the left edge of the next node.
+function linkPath(l) {
+  const sx = l.source.y + (l.source.data.w || 0);
+  const sy = l.source.x;
+  const tx = l.target.y;
+  const ty = l.target.x;
+  const mx = (sx + tx) / 2;
+  return `M${sx},${sy}C${mx},${sy} ${mx},${ty} ${tx},${ty}`;
+}
 
 function wrap(text, max) {
   const words = text.split(/\s+/);
@@ -459,7 +591,7 @@ function wrap(text, max) {
 
 function statusText(b) {
   if (b.status === 'loading') return b.people.length ? 'Finding more people…' : 'Searching for people…';
-  return b.error || 'No people yet · open to search';
+  return b.error || 'No people yet. Open to search.';
 }
 
 function buildTree(map) {
@@ -468,13 +600,13 @@ function buildTree(map) {
     kind: 'root',
     children: [
       ...map.branches.map((b) => {
-        const children = b.people.map((p) => ({ id: `${b.id}|${p.id}`, kind: 'person', b, p }));
-        if (b.status === 'loading' || b.error || !b.people.length) {
+        const children = b.collapsed ? [] : b.people.map((p) => ({ id: `${b.id}|${p.id}`, kind: 'person', b, p }));
+        if (!b.collapsed && (b.status === 'loading' || b.error || !b.people.length)) {
           children.push({ id: `${b.id}|status`, kind: 'status', b });
         }
-        return { id: b.id, kind: 'branch', b, children };
+        return { id: b.id, kind: 'branch', b, w: pillWidth(b.label), children };
       }),
-      { id: 'add', kind: 'add' },
+      { id: 'add', kind: 'add', w: 140 },
     ],
   });
 }
@@ -482,13 +614,14 @@ function buildTree(map) {
 function render({ grow = false } = {}) {
   if (!state.map) return;
   els.empty.hidden = true;
-  els.mapTitle.textContent = `Network map · ${state.map.goal}`;
+  els.mapTitle.textContent = state.map.goal;
   updateToolbar();
+  const staged = grow && !reduceMotion.matches;
 
   const root = buildTree(state.map);
   d3.tree()
-    .nodeSize([CARD_H + 16, 290])
-    .separation((a, b) => (a.parent === b.parent ? 1 : 1.5))(root);
+    .nodeSize([CARD_H + 12, COL])
+    .separation((a, b) => (a.parent === b.parent ? 1 : 1.4))(root);
   lastRoot = root;
 
   if (grow) {
@@ -496,7 +629,17 @@ function render({ grow = false } = {}) {
     nodeLayer.selectAll('*').remove();
   }
 
-  // Links. On a new map they draw themselves in, level by level; after edits they slide.
+  glowLayer
+    .selectAll('circle')
+    .data([root])
+    .join('circle')
+    .attr('r', 420)
+    .attr('fill', 'url(#root-glow)')
+    .attr('cx', (d) => d.y)
+    .attr('cy', (d) => d.x);
+
+  // Links: dotted light. On a new map they reveal left to right, level by level
+  // (dotted strokes can't use the dashoffset trick); after edits they slide.
   linkLayer
     .selectAll('path:not(.exiting)')
     .data(root.links(), (d) => d.target.data.id)
@@ -505,28 +648,35 @@ function render({ grow = false } = {}) {
         enter
           .append('path')
           .attr('d', linkPath)
+          .property('__d', linkPath)
           .each(function (d) {
             const path = d3.select(this);
-            if (!grow) {
-              path.style('opacity', 0).transition('fade').delay(MOVE / 2).duration(300).style('opacity', 1);
+            if (!staged) {
+              path.attr('opacity', 0).transition('fade').delay(grow ? 0 : MOVE / 2).duration(300).attr('opacity', 1);
               return;
             }
-            const len = this.getTotalLength();
             path
-              .attr('stroke-dasharray', len)
-              .attr('stroke-dashoffset', len)
+              .style('clip-path', 'inset(0% 100% 0% 0%)')
               .transition('fade')
               .delay(delayFor(d.target))
-              .duration(650)
+              .duration(700)
               .ease(d3.easeCubicOut)
-              .attr('stroke-dashoffset', 0)
-              .on('end', function () { d3.select(this).attr('stroke-dasharray', null); });
+              .style('clip-path', 'inset(0% 0% 0% 0%)')
+              .on('end', function () { d3.select(this).style('clip-path', null); });
           }),
-      (update) => update.call((p) => p.transition('move').duration(MOVE).attr('d', linkPath)),
+      (update) =>
+        update.each(function (d) {
+          const next = linkPath(d);
+          if (this.__d === next) return;
+          this.__d = next;
+          d3.select(this).transition('move').duration(MOVE).attr('d', next);
+        }),
       (exit) => fadeOut(exit),
     )
     .attr('class', (d) => `link depth-${d.target.depth} to-${d.target.data.kind}`);
 
+  // Nodes only move when their position changes, so a re-render mid-animation
+  // (e.g. a search finishing) doesn't cut the grow-in short.
   const nodes = nodeLayer
     .selectAll('g.node:not(.exiting)')
     .data(root.descendants(), (d) => d.data.id)
@@ -534,19 +684,32 @@ function render({ grow = false } = {}) {
       (enter) =>
         enter
           .append('g')
-          .attr('transform', pos)
+          .property('__pos', pos)
+          .attr('transform', (d) => (staged && d.depth ? `translate(${d.y},${d.x + 6})` : pos(d)))
           .style('opacity', 0)
           .call((s) =>
             s
               .transition('fade')
-              .delay((d) => (grow ? (d.depth === 0 ? 0 : delayFor(d) + 380) : MOVE / 2))
-              .duration(grow ? 380 : 300)
+              .delay((d) => (staged ? (d.depth === 0 ? 0 : delayFor(d) + 420) : grow ? 0 : MOVE / 2))
+              .duration(staged ? 420 : 300)
+              .ease(d3.easeCubicOut)
+              .attr('transform', pos)
               .style('opacity', 1),
           ),
-      (update) => update.call((s) => s.transition('move').duration(MOVE).attr('transform', pos).style('opacity', 1)),
+      (update) =>
+        update.each(function (d) {
+          const next = pos(d);
+          if (this.__pos === next) return;
+          this.__pos = next;
+          d3.select(this).interrupt('fade').style('opacity', 1).transition('move').duration(MOVE).attr('transform', next);
+        }),
       (exit) => fadeOut(exit),
     )
-    .attr('class', (d) => `node ${d.data.kind}${d.data.kind === 'status' ? ` ${d.data.b.status}` : ''}`);
+    .attr('class', (d) => `node ${d.data.kind}${d.data.kind === 'status' ? ` ${d.data.b.status}` : ''}${d.data.kind === 'branch' && d.data.b.collapsed ? ' collapsed' : ''}`)
+    .attr('tabindex', 0)
+    .attr('role', 'button')
+    .attr('aria-label', ariaLabel)
+    .order(); // keep Tab order: goal, branches, then people
 
   nodes.each(function (d) { drawNode(d3.select(this), d); });
   markActive();
@@ -556,60 +719,132 @@ function render({ grow = false } = {}) {
 
 // transition.remove() skips elements with other transitions still running, so stop those first.
 function fadeOut(exit) {
-  return exit.classed('exiting', true).interrupt('move').interrupt('fade').transition('fade').duration(200).style('opacity', 0).remove();
+  return exit
+    .classed('exiting', true)
+    .attr('tabindex', null)
+    .interrupt('move')
+    .interrupt('fade')
+    .transition('fade')
+    .duration(200)
+    .style('opacity', 0)
+    .remove();
+}
+
+function ariaLabel(d) {
+  const { kind, b, p } = d.data;
+  if (kind === 'root') return `Goal: ${state.map.goal}. Edit goal and background.`;
+  if (kind === 'branch') return `Branch: ${b.label}, ${b.people.length} people, ${b.collapsed ? 'collapsed' : 'expanded'}. Enter edits, arrow keys collapse or expand.`;
+  if (kind === 'person') return `${p.name}, ${p.headline}. Open details.`;
+  if (kind === 'status') return `${b.label}: ${statusText(b)}`;
+  return 'Add a new branch';
+}
+
+function activate(d) {
+  const { kind, b, p } = d.data;
+  if (kind === 'root') openGoal();
+  else if (kind === 'branch' || kind === 'status') openBranch(b.id);
+  else if (kind === 'person') openPerson(b.id, p.id);
+  else if (kind === 'add') openNewBranch();
+}
+
+// What a node shows; it is only redrawn when this changes, so the root rings keep breathing.
+function signature(d) {
+  const { kind, b, p } = d.data;
+  if (kind === 'root') return `root|${state.map.goal}`;
+  if (kind === 'branch') return `branch|${b.label}|${b.people.length}|${b.collapsed ? 1 : 0}|${b.status}`;
+  if (kind === 'person') return `person|${p.name}|${p.headline}`;
+  if (kind === 'status') return `status|${b.status}|${statusText(b)}`;
+  return kind;
 }
 
 function drawNode(n, d) {
+  n.on('click', (_e, datum) => activate(datum))
+    .on('keydown', (e, datum) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activate(datum);
+      } else if (datum.data.kind === 'branch' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        setCollapsed(datum.data.id, e.key === 'ArrowLeft');
+      }
+    })
+    .on('mouseenter focus', (_e, datum) => lightPath(datum))
+    .on('mouseleave blur', () => lightPath(selectedNode()));
+  if (d.data.kind === 'branch' || d.data.kind === 'person') n.call(drag);
+
+  const sig = signature(d);
+  if (n.property('__sig') === sig) return;
+  n.property('__sig', sig);
   n.selectAll('*').remove();
-  n.on('click', null).on('.drag', null);
   const { kind } = d.data;
 
   if (kind === 'root') {
-    n.append('circle').attr('class', 'halo').attr('r', 15);
-    n.append('circle').attr('r', 7);
-    const text = n.append('text').attr('text-anchor', 'end').attr('x', -26);
-    const lines = wrap(state.map.goal, 22);
+    n.append('circle').attr('class', 'hit').attr('r', 48);
+    n.append('circle').attr('class', 'ring outer').attr('r', 44);
+    n.append('circle').attr('class', 'ring inner').attr('r', 26);
+    n.append('circle').attr('class', 'core').attr('r', 7);
+    const text = n.append('text').attr('text-anchor', 'end');
+    const lines = wrap(state.map.goal, 20);
     lines.forEach((l, i) =>
       text
         .append('tspan')
-        .attr('x', -26)
+        .attr('x', -64)
         .attr('dy', i === 0 ? `${0.35 - (lines.length - 1) * 0.55}em` : '1.1em')
         .text(l),
     );
-    n.append('title').text('Edit your goal and background');
-    n.on('click', openGoal);
   } else if (kind === 'branch') {
-    const { b } = d.data;
-    n.append('circle').attr('class', 'drop-ring').attr('r', 22);
-    n.append('rect').attr('x', -5).attr('y', -5).attr('width', 10).attr('height', 10).attr('transform', 'rotate(45)');
-    n.append('text').attr('x', 0).attr('y', -14).attr('text-anchor', 'middle').text(truncate(b.label, 34));
-    n.append('title').text(`${b.label}: click to edit, drag onto another branch to merge`);
-    n.on('click', () => openBranch(b.id));
-    n.call(drag);
+    const { b, w } = d.data;
+    n.append('rect').attr('class', 'drop-ring').attr('x', -6).attr('y', -PILL_H / 2 - 6).attr('width', w + 12).attr('height', PILL_H + 12).attr('rx', PILL_H / 2 + 6);
+    n.append('rect').attr('class', 'pill-bg').attr('y', -PILL_H / 2).attr('width', w).attr('height', PILL_H).attr('rx', PILL_H / 2);
+    n.append('circle').attr('class', 'lamp').attr('cx', 16).attr('r', 3);
+    n.append('text').attr('class', 'name').attr('x', 28).attr('y', 4).text(truncate(b.label, 26));
+    // Collapse toggle: the count plus a caret, at the pill's right end.
+    const t = n.append('g').attr('class', 'toggle').attr('transform', `translate(${w - 48},0)`);
+    t.append('rect').attr('class', 'toggle-hit').attr('y', -PILL_H / 2).attr('width', 48).attr('height', PILL_H).attr('rx', PILL_H / 2);
+    t.append('line').attr('class', 'toggle-rule').attr('x1', 0).attr('x2', 0).attr('y1', -8).attr('y2', 8);
+    t.append('text').attr('class', 'count').attr('x', 10).attr('y', 4).text(String(b.people.length).padStart(2, '0'));
+    t.append('path').attr('class', 'caret').attr('d', b.collapsed ? 'M33 -4 L37 0 L33 4' : 'M31 -2 L35 2 L39 -2');
+    t.append('title').text(b.collapsed ? 'Expand branch' : 'Collapse branch');
+    t.on('click', (e) => {
+      e.stopPropagation();
+      setCollapsed(b.id, !findBranch(b.id)?.collapsed);
+    });
   } else if (kind === 'person') {
-    const { p, b } = d.data;
-    n.append('rect').attr('class', 'card').attr('x', 0).attr('y', -CARD_H / 2).attr('width', CARD_W).attr('height', CARD_H).attr('rx', 5);
-    n.append('rect').attr('class', 'bar').attr('x', 0).attr('y', -CARD_H / 2).attr('width', 3).attr('height', CARD_H).attr('rx', 1.5);
-    n.append('text').attr('class', 'title').attr('x', 14).attr('y', -3).text(truncate(p.name, 31));
-    n.append('text').attr('class', 'org').attr('x', 14).attr('y', 13).text(truncate(p.headline, 36));
-    n.append('title').text(`${p.name}, ${p.headline}\nDrag onto another branch to move`);
-    n.on('click', () => openPerson(b.id, p.id));
-    n.call(drag);
+    const { p } = d.data;
+    n.append('rect').attr('class', 'card').attr('y', -CARD_H / 2).attr('width', CARD_W).attr('height', CARD_H).attr('rx', 12);
+    n.append('circle').attr('class', 'mark-ring').attr('cx', CARD_W - 18).attr('cy', -CARD_H / 2 + 14).attr('r', 7);
+    n.append('circle').attr('class', 'mark-dot').attr('cx', CARD_W - 18).attr('cy', -CARD_H / 2 + 14).attr('r', 2.5);
+    n.append('text').attr('class', 'title').attr('x', 16).attr('y', -3).text(truncate(p.name, 27));
+    n.append('text').attr('class', 'org').attr('x', 16).attr('y', 15).text(truncate(p.headline, 30));
   } else if (kind === 'status') {
     const { b } = d.data;
-    n.append('circle').attr('class', 'dot').attr('cx', 6).attr('r', 3.5);
-    n.append('text').attr('x', 18).attr('y', 4).text(truncate(statusText(b), 44));
-    n.append('title').text(statusText(b));
-    n.on('click', () => openBranch(b.id));
+    const dots = b.status === 'loading' ? [4, 12, 20] : [4];
+    dots.forEach((cx) => n.append('circle').attr('class', 'dot').attr('cx', cx).attr('r', 2.2));
+    n.append('text').attr('x', dots.at(-1) + 12).attr('y', 4).text(truncate(statusText(b), 42));
   } else if (kind === 'add') {
-    n.append('rect').attr('x', -62).attr('y', -13).attr('width', 124).attr('height', 26).attr('rx', 13);
-    n.append('text').attr('text-anchor', 'middle').attr('y', 4).text('+ New branch');
-    n.on('click', openNewBranch);
+    n.append('rect').attr('y', -PILL_H / 2).attr('width', d.data.w).attr('height', PILL_H).attr('rx', PILL_H / 2);
+    n.append('text').attr('x', d.data.w / 2).attr('y', 4).attr('text-anchor', 'middle').text('+ NEW BRANCH');
   }
+}
+
+function selectedNode() {
+  const v = state.view;
+  if (!v || !lastRoot) return null;
+  return lastRoot.descendants().find((d) => {
+    if (v.kind === 'person') return d.data.kind === 'person' && d.data.b.id === v.branchId && d.data.p.id === v.personId;
+    if (v.kind === 'branch') return d.data.kind === 'branch' && d.data.id === v.branchId;
+    return false;
+  });
 }
 
 function markActive() {
   const v = state.view;
+  // Focus: while a person or branch is open, everything outside that branch steps back.
+  const focusId = v && (v.kind === 'person' || v.kind === 'branch') ? v.branchId : null;
+  svg.classed('focusing', Boolean(focusId));
+  const inFocus = (d) => d.data.kind === 'root' || d.data.id === focusId || d.data.b?.id === focusId;
+  nodeLayer.selectAll('g.node').classed('in-focus', (d) => Boolean(focusId) && inFocus(d));
+  linkLayer.selectAll('path').classed('in-focus', (l) => Boolean(focusId) && inFocus(l.target));
   nodeLayer.selectAll('g.node').classed('active', (d) => {
     if (!v) return false;
     if (v.kind === 'person') return d.data.kind === 'person' && d.data.b.id === v.branchId && d.data.p.id === v.personId;
@@ -617,6 +852,41 @@ function markActive() {
     if (v.kind === 'goal') return d.data.kind === 'root';
     return false;
   });
+  lightPath(selectedNode());
+}
+
+// Light the path from a node back to the goal, with a particle of signal running along it.
+let litPaths = [];
+let particleFrame = 0;
+
+function lightPath(d) {
+  const ids = new Set();
+  for (let n = d; n?.parent; n = n.parent) ids.add(n.data.id);
+  const lit = linkLayer.selectAll('path:not(.exiting)').classed('lit', (l) => ids.has(l.target.data.id));
+  litPaths = lit.filter((l) => ids.has(l.target.data.id)).nodes().sort((a, b) => d3.select(a).datum().target.depth - d3.select(b).datum().target.depth);
+
+  if (!litPaths.length || reduceMotion.matches) {
+    cancelAnimationFrame(particleFrame);
+    particleFrame = 0;
+    particleLayer.selectAll('*').remove();
+    return;
+  }
+  if (particleFrame) return; // already running; it reads litPaths every frame
+  const dot = particleLayer.append('circle').attr('class', 'particle').attr('r', 2.6);
+  const start = performance.now();
+  const step = (now) => {
+    particleFrame = requestAnimationFrame(step);
+    const paths = litPaths.filter((p) => p.isConnected);
+    const t = ((now - start) % 2200) / 1500; // travel for 1.5s, rest for 0.7s
+    if (!paths.length || t > 1) return dot.attr('opacity', 0);
+    const lens = paths.map((p) => p.getTotalLength());
+    let at = d3.easeCubicInOut(t) * d3.sum(lens);
+    let i = 0;
+    while (i < paths.length - 1 && at > lens[i]) at -= lens[i++];
+    const pt = paths[i].getPointAtLength(Math.min(at, lens[i]));
+    dot.attr('opacity', 1).attr('cx', pt.x).attr('cy', pt.y);
+  };
+  particleFrame = requestAnimationFrame(step);
 }
 
 // Drag a branch onto another branch to merge them; drag a person onto a branch to move them.
@@ -653,11 +923,15 @@ function dropTarget(d, px, py) {
   for (const n of lastRoot.descendants()) {
     const b = n.data.b;
     if (!b || b.id === own) continue;
-    if (n.data.kind === 'branch' && Math.hypot(px - n.y, py - n.x) < 40) return b.id;
+    if (
+      n.data.kind === 'branch' &&
+      px > n.y - 12 && px < n.y + n.data.w + 12 &&
+      Math.abs(py - n.x) < PILL_H / 2 + 14
+    ) return b.id;
     if (
       (n.data.kind === 'person' || n.data.kind === 'status') &&
       px > n.y - 10 && px < n.y + CARD_W + 10 &&
-      py > n.x - CARD_H / 2 - 6 && py < n.x + CARD_H / 2 + 6
+      Math.abs(py - n.x) < CARD_H / 2 + 6
     ) return b.id;
   }
   return null;
@@ -673,10 +947,11 @@ function fitToView(animate) {
   const extent = { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity };
   for (const n of lastRoot.descendants()) {
     const k = n.data.kind;
-    extent.left = Math.min(extent.left, n.y - (k === 'root' ? 230 : k === 'branch' ? 120 : 0));
-    extent.right = Math.max(extent.right, n.y + (k === 'person' || k === 'status' ? CARD_W : 120));
-    extent.top = Math.min(extent.top, n.x - (k === 'branch' ? 30 : CARD_H / 2));
-    extent.bottom = Math.max(extent.bottom, n.x + CARD_H / 2);
+    const half = k === 'root' ? 50 : CARD_H / 2;
+    extent.left = Math.min(extent.left, n.y - (k === 'root' ? 330 : 8));
+    extent.right = Math.max(extent.right, n.y + (k === 'person' || k === 'status' ? CARD_W : k === 'root' ? 50 : n.data.w + 8));
+    extent.top = Math.min(extent.top, n.x - half);
+    extent.bottom = Math.max(extent.bottom, n.x + half);
   }
   const box = { x: extent.left, y: extent.top, width: extent.right - extent.left, height: extent.bottom - extent.top };
 
@@ -685,15 +960,64 @@ function fitToView(animate) {
   // Fit into the space left of the detail panel, unless it covers the whole map (narrow screens).
   const panel = els.detail.classList.contains('open') ? els.detail.offsetWidth : 0;
   const width = rect.width - panel >= 300 ? rect.width - panel : rect.width;
-  const pad = 56;
-  const k = Math.max(0.3, Math.min(1.1, (width - pad * 2) / box.width, (height - pad * 2 - 30) / box.height));
+  const pad = 48;
+  const k = Math.max(0.3, Math.min(1.05, (width - pad * 2) / box.width, (height - pad * 2) / box.height));
   const tx = width / 2 - k * (box.x + box.width / 2);
-  const ty = height / 2 + 15 - k * (box.y + box.height / 2);
+  const ty = height / 2 - k * (box.y + box.height / 2);
   const t = d3.zoomIdentity.translate(tx, ty).scale(k);
   (animate ? svg.transition('fit').duration(600) : svg).call(zoom.transform, t);
 }
 
-window.addEventListener('resize', () => state.map && autoFit && fitToView(false));
+// Refit when the map area changes size (window resize, chat collapsing), unless the user has taken over.
+new ResizeObserver(() => state.map && autoFit && fitToView(false)).observe(document.querySelector('.map'));
+
+function zoomBy(factor) {
+  autoFit = false;
+  svg.transition('fit').duration(250).call(zoom.scaleBy, factor);
+}
+
+// The part of the map not covered by the detail panel, in screen pixels relative to the svg.
+function visibleArea() {
+  const rect = svg.node().getBoundingClientRect();
+  const area = { left: 0, top: 0, right: rect.width, bottom: rect.height };
+  if (els.detail.classList.contains('open')) {
+    // Use the panel's final size, not its rect: it may still be sliding in.
+    const { offsetWidth: w, offsetHeight: h } = els.detail;
+    if (w >= rect.width - 4) area.bottom = Math.min(area.bottom, window.innerHeight - h - rect.top); // bottom sheet
+    else area.right = rect.width - w;
+  }
+  return area;
+}
+
+// Pan just enough to bring a node fully into the visible area (never zooms).
+function ensureVisible(d) {
+  if (!d) return;
+  const t = d3.zoomTransform(svg.node());
+  const k = d.data.kind;
+  const w = k === 'person' || k === 'status' ? CARD_W : k === 'root' ? 50 : d.data.w;
+  const left = t.applyX(d.y - (k === 'root' ? 300 : 0));
+  const right = t.applyX(d.y + w);
+  const top = t.applyY(d.x - CARD_H / 2);
+  const bottom = t.applyY(d.x + CARD_H / 2);
+  const a = visibleArea();
+  const pad = 32;
+  let dx = 0;
+  let dy = 0;
+  if (right > a.right - pad) dx = a.right - pad - right;
+  if (left + dx < a.left + pad) dx = a.left + pad - left;
+  if (bottom > a.bottom - pad) dy = a.bottom - pad - bottom;
+  if (top + dy < a.top + pad) dy = a.top + pad - top;
+  if (!dx && !dy) return;
+  svg.transition('fit').duration(450).ease(d3.easeCubicOut).call(zoom.translateBy, dx / t.k, dy / t.k);
+}
+
+function setCollapsed(branchId, collapsed) {
+  const b = findBranch(branchId);
+  if (!b || Boolean(b.collapsed) === collapsed) return;
+  b.collapsed = collapsed;
+  if (collapsed && state.view?.kind === 'person' && state.view.branchId === branchId) openBranch(branchId);
+  commit();
+}
 
 // The map clips its overflow, but the browser can still scroll it to reveal a focused
 // element in the sliding panel, which would shift the toolbar and map. Pin it in place.
@@ -710,6 +1034,14 @@ function updateToolbar() {
   els.addBranch.disabled = !has;
   els.merge.disabled = !has || state.map.branches.length < 2;
   els.undo.disabled = !undoStack.length;
+  els.input.placeholder = has ? 'Ask for a change…' : 'Describe your goal…';
+  els.zoomIn.disabled = !has;
+  els.zoomOut.disabled = !has;
+  els.mapCount.hidden = !has;
+  if (has) {
+    const people = state.map.branches.reduce((n, b) => n + b.people.length, 0);
+    els.mapCount.textContent = `Fig. map · ${state.map.branches.length} branches · ${people} people`;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -783,13 +1115,86 @@ function profileLink(url) {
   }
 }
 
-const fmtDates = (x) => [x.from, x.to ?? (x.from ? 'present' : null)].filter(Boolean).join(' – ');
+const fmtDates = (x) => [x.from, x.to ?? (x.from ? 'now' : null)].filter(Boolean).join(' - ');
+
+let personTab = 'prep'; // remembered while stepping between people
+
+function stepPerson(dir) {
+  const v = state.view;
+  const b = v && findBranch(v.branchId);
+  if (!b || !b.people.length) return;
+  const i = b.people.findIndex((p) => p.id === v.personId);
+  const next = b.people[(i + dir + b.people.length) % b.people.length];
+  openPerson(b.id, next.id);
+}
+
+function iconButton(icon, label, onClick, cls = '') {
+  const b = el('button', `icon-btn ${cls}`.trim());
+  b.type = 'button';
+  b.setAttribute('aria-label', label);
+  b.title = label;
+  b.innerHTML = `<i class="ph-light ph-${icon}" aria-hidden="true"></i>`;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+// Small overflow menu (details/summary keeps it keyboard and screen-reader friendly).
+function menu(label, items) {
+  const d = el('details', 'menu');
+  const summary = el('summary', 'icon-btn');
+  summary.setAttribute('aria-label', label);
+  summary.title = label;
+  summary.innerHTML = '<i class="ph-light ph-dots-three" aria-hidden="true"></i>';
+  const list = el('div', 'menu-list');
+  list.setAttribute('role', 'menu');
+  for (const item of items) {
+    if (item.heading) {
+      list.append(el('p', 'menu-heading', item.heading));
+      continue;
+    }
+    const b = button(item.label, `menu-item${item.danger ? ' danger' : ''}`, () => {
+      d.removeAttribute('open');
+      item.onClick();
+    });
+    b.setAttribute('role', 'menuitem');
+    list.append(b);
+  }
+  d.append(summary, list);
+  return d;
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Copied talking point');
+  } catch {
+    toast('Copy failed. Select the text instead.');
+  }
+}
 
 function openPerson(branchId, personId) {
   const b = findBranch(branchId);
   const p = b?.people.find((x) => x.id === personId);
   if (!p) return dismissDetail();
+  if (b.collapsed) {
+    b.collapsed = false;
+    commit();
+  }
   const body = openView({ kind: 'person', branchId, personId });
+  const index = b.people.indexOf(p);
+
+  // Header: where you are, who this is, and the one action that matters.
+  const nav = el('div', 'sheet-nav');
+  nav.append(el('p', 'tag', b.label));
+  if (b.people.length > 1) {
+    const stepper = el('div', 'stepper');
+    stepper.append(
+      iconButton('caret-left', 'Previous person (←)', () => stepPerson(-1)),
+      el('span', 'step-count', `${index + 1} / ${b.people.length}`),
+      iconButton('caret-right', 'Next person (→)', () => stepPerson(1)),
+    );
+    nav.append(stepper);
+  }
 
   const head = el('div', 'person-head');
   const avatar = el('div', 'avatar', initials(p.name));
@@ -800,82 +1205,119 @@ function openPerson(branchId, personId) {
     img.src = p.image;
     img.onload = () => { avatar.textContent = ''; avatar.append(img); };
   }
-  const who = el('div');
+  const who = el('div', 'who');
   who.append(el('h2', null, p.name), el('p', 'org', [p.headline, p.location].filter(Boolean).join(' · ')));
   head.append(avatar, who);
-  body.append(el('p', 'kicker', b.label), head);
 
+  const actions = el('div', 'sheet-actions');
   const link = p.url && profileLink(p.url);
   if (link) {
-    const a = el('a', 'btn primary', link.label);
+    const a = el('a', 'pill pill-primary sm', link.label);
     a.href = p.url;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
-    body.append(a, el('p', 'link-url', link.short));
+    a.title = link.short;
+    actions.append(a);
+  } else {
+    actions.append(el('span', 'no-link', 'No profile link'));
   }
-
-  if (p.summary) body.append(el('h3', null, 'About'), el('p', 'why', p.summary));
-  if (p.why) body.append(el('h3', null, 'Why reach out'), el('p', 'why', p.why));
-
-  if (p.in_common?.length) {
-    body.append(el('h3', null, 'In common'));
-    const tags = el('div', 'tags');
-    p.in_common.forEach((t) => tags.append(el('span', 'tag-pill', t)));
-    body.append(tags);
-  }
-
-  if (p.talking_points?.length) {
-    body.append(el('h3', null, 'Talking points'));
-    const ol = el('ol');
-    p.talking_points.forEach((t) => ol.append(el('li', null, t)));
-    body.append(ol);
-  }
-
-  if (p.experience?.length) {
-    body.append(el('h3', null, 'Experience'));
-    const ul = el('ul', 'facts');
-    p.experience.forEach((x) => {
-      const li = el('li');
-      li.append(el('span', null, [x.title, x.company].filter(Boolean).join(' · ')), el('span', 'dates', fmtDates(x)));
-      ul.append(li);
-    });
-    body.append(ul);
-  }
-
-  if (p.education?.length) {
-    body.append(el('h3', null, 'Education'));
-    const ul = el('ul', 'facts');
-    p.education.forEach((x) => {
-      const li = el('li');
-      li.append(el('span', null, [x.degree, x.school].filter(Boolean).join(' · ')), el('span', 'dates', fmtDates(x)));
-      ul.append(li);
-    });
-    body.append(ul);
-  }
-
   const others = state.map.branches.filter((x) => x.id !== branchId);
-  const actions = el('div', 'actions');
-  if (others.length) {
-    const select = el('select');
-    select.append(el('option', null, 'Move to branch…'));
-    others.forEach((o) => {
-      const opt = el('option', null, o.label);
-      opt.value = o.id;
-      select.append(opt);
-    });
-    select.firstChild.value = '';
-    select.addEventListener('change', () => select.value && movePerson(branchId, personId, select.value));
-    actions.append(select);
-  }
-  actions.append(button('Remove from map', 'quiet danger', () => {
-    removePerson(branchId, personId);
-    openBranch(branchId);
-  }));
-  const practice = button('Practice coffee chat · coming soon', 'soon', () => {});
-  practice.disabled = true;
-  actions.append(practice);
-  body.append(actions);
+  actions.append(
+    menu('More actions', [
+      ...(others.length ? [{ heading: 'Move to' }, ...others.map((o) => ({ label: o.label, onClick: () => movePerson(branchId, personId, o.id) }))] : []),
+      { label: 'Remove from map', danger: true, onClick: () => { removePerson(branchId, personId); openBranch(branchId); } },
+    ]),
+  );
 
+  body.append(nav, head, actions);
+  if (p.why) body.append(el('p', 'why lead', p.why));
+
+  // Tabs: prep (what you'll say) first, profile (the facts behind it) second.
+  const tabs = el('div', 'tabs');
+  tabs.setAttribute('role', 'tablist');
+  tabs.setAttribute('aria-label', 'Person details');
+  const panels = {};
+  const tabButtons = {};
+  const select = (name, focus) => {
+    personTab = name;
+    for (const key of Object.keys(panels)) {
+      const on = key === name;
+      tabButtons[key].setAttribute('aria-selected', String(on));
+      tabButtons[key].tabIndex = on ? 0 : -1;
+      panels[key].hidden = !on;
+    }
+    if (focus) tabButtons[name].focus();
+  };
+  const addTab = (name, label) => {
+    const t = button(label, 'tab', () => select(name));
+    t.id = `tab-${name}`;
+    t.setAttribute('role', 'tab');
+    t.setAttribute('aria-controls', `panel-${name}`);
+    t.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      e.stopPropagation(); // arrows switch tabs here, not people
+      select(name === 'prep' ? 'profile' : 'prep', true);
+    });
+    const panel = el('div', 'tab-panel');
+    panel.id = `panel-${name}`;
+    panel.setAttribute('role', 'tabpanel');
+    panel.setAttribute('aria-labelledby', t.id);
+    tabButtons[name] = t;
+    panels[name] = panel;
+    tabs.append(t);
+  };
+  addTab('prep', 'Prep');
+  addTab('profile', 'Profile');
+  body.append(tabs);
+
+  // Prep: talking points, each copyable.
+  if (p.talking_points?.length) {
+    const ol = el('ol', 'points');
+    p.talking_points.forEach((t) => {
+      const li = el('li');
+      li.append(el('span', 'point-text', t), iconButton('copy', 'Copy talking point', () => copyText(t), 'copy'));
+      ol.append(li);
+    });
+    panels.prep.append(ol);
+  } else {
+    panels.prep.append(el('p', 'why', 'No talking points for this person yet.'));
+  }
+  panels.prep.append(el('p', 'soon-note label', 'Coffee-chat practice · Soon'));
+
+  // Profile: the facts the talking points are built from.
+  if (p.summary) panels.profile.append(el('p', 'why', p.summary));
+  const rows = [];
+  const row = (k, v, cls) => {
+    const r = el('div', 'data-row');
+    r.append(el('span', 'k', k), el('span', `v${cls ? ` ${cls}` : ''}`, v));
+    return r;
+  };
+  const stack = (k, entries) => {
+    const r = el('div', 'data-row stack');
+    r.append(el('span', 'k', k));
+    entries.forEach(([left, right]) => {
+      const e = el('div', 'entry');
+      e.append(el('span', null, left), el('span', null, right));
+      r.append(e);
+    });
+    return r;
+  };
+  const ties = p.in_common ?? [];
+  rows.push(ties.length ? stack(`Shared ties · ${ties.length}`, ties.map((t) => [t, ''])) : row('Shared ties', 'None found'));
+  if (p.experience?.length) {
+    rows.push(stack('Experience', p.experience.map((x) => [[x.title, x.company].filter(Boolean).join(', '), fmtDates(x)])));
+  }
+  if (p.education?.length) {
+    rows.push(stack('Education', p.education.map((x) => [[x.degree, x.school].filter(Boolean).join(', '), fmtDates(x)])));
+  }
+  if (link) rows.push(row('Source', link.short));
+  const panel = el('div', 'data-panel');
+  panel.append(...rows);
+  panels.profile.append(panel);
+
+  body.append(panels.prep, panels.profile);
+  select(personTab);
   showDetail();
 }
 
@@ -883,19 +1325,28 @@ function openBranch(id) {
   const b = findBranch(id);
   if (!b) return dismissDetail();
   const body = openView({ kind: 'branch', branchId: id });
-  body.append(el('p', 'kicker', 'Branch'));
 
-  const name = input(b.label, 'e.g. UW alumni at Microsoft');
-  name.className = 'title-input';
-  const why = textarea(b.why, 'Why this group matters for your goal', 2);
-  const query = textarea(b.query, 'e.g. product managers at Microsoft who studied at the University of Washington', 3);
+  const nav = el('div', 'sheet-nav');
+  nav.append(el('p', 'tag', 'Branch'));
+  body.append(nav, el('h2', null, b.label));
+  if (b.why) body.append(el('p', 'why lead', b.why));
+
+  // People first: that's what this branch is for.
+  body.append(el('div', 'branch-people'));
+  refreshBranchPeople(id);
+
+  // Editing stays folded until asked for.
+  const edit = el('details', 'disclosure');
+  edit.append(el('summary', null, 'Edit name & search'));
+  const name = input(b.label, 'e.g. UW alumni at Microsoft…');
+  const why = textarea(b.why, 'Why this group matters for your goal…', 2);
+  const query = textarea(b.query, 'e.g. product managers at Microsoft who studied at UW…', 3);
   const form = el('form', 'editor');
   form.append(
     field('Name', name),
     field('Why it matters', why),
     field('Who to find', query, 'Plain English. This is what people search looks for.'),
   );
-
   const saveRow = el('div', 'row');
   const saveBtn = button('Save changes', 'primary', () => saveEdits(false));
   const searchBtn = button('Save & search again', 'secondary', () => saveEdits(true));
@@ -905,7 +1356,8 @@ function openBranch(id) {
     e.preventDefault();
     saveEdits(false);
   });
-  body.append(form);
+  edit.append(form);
+  body.append(edit);
 
   function saveEdits(research) {
     const fields = { label: name.value.trim() || b.label, why: why.value.trim(), query: query.value.trim() };
@@ -914,15 +1366,17 @@ function openBranch(id) {
     else if (research) snapshot();
     if (research) loadPeople(id, 'replace');
     flash(saveBtn, research ? 'Searching…' : changed ? 'Saved' : 'No changes');
+    if (changed) body.querySelector('h2').textContent = fields.label;
   }
 
-  body.append(el('div', 'branch-people'));
-  refreshBranchPeople(id);
-
-  const more = el('div', 'actions');
+  const more = el('div', 'sheet-footer');
   if (state.map.branches.length > 1) {
-    more.append(button('Merge with another branch…', 'secondary', () => openMerge([id])));
+    more.append(button('Merge with another branch…', 'quiet', () => openMerge([id])));
   }
+  more.append(button(b.collapsed ? 'Expand on map' : 'Collapse on map', 'quiet', () => {
+    setCollapsed(id, !b.collapsed);
+    openBranch(id);
+  }));
   const del = button('Delete branch', 'quiet danger', () => {
     const confirm = confirmRow(
       `Delete "${b.label}" and its ${b.people.length} people?`,
@@ -941,8 +1395,8 @@ function openBranch(id) {
   showDetail();
 }
 
-// The people list inside the branch editor updates on its own, so a finished search
-// doesn't wipe out edits being typed into the form above it.
+// The people list inside the branch sheet updates on its own, so a finished search
+// doesn't wipe out edits being typed into the form below it.
 function refreshBranchPeople(id) {
   if (state.view?.kind !== 'branch' || state.view.branchId !== id) return;
   const box = els.detailBody.querySelector('.branch-people');
@@ -956,9 +1410,7 @@ function refreshBranchPeople(id) {
     const li = el('li');
     const open = button('', 'person-link', () => openPerson(id, p.id));
     open.append(el('span', 'pl-name', p.name), el('span', 'pl-head', p.headline));
-    const remove = button('×', 'icon', () => removePerson(id, p.id));
-    remove.title = `Remove ${p.name}`;
-    remove.setAttribute('aria-label', `Remove ${p.name}`);
+    const remove = iconButton('x', `Remove ${p.name}`, () => removePerson(id, p.id), 'remove');
     li.append(open, remove);
     ul.append(li);
   });
@@ -983,7 +1435,7 @@ function refreshBranchPeople(id) {
 
 function openGoal() {
   const body = openView({ kind: 'goal' });
-  body.append(el('p', 'kicker', 'Goal'));
+  body.append(el('p', 'tag', 'Goal'));
   const goal = input(state.map.goal);
   goal.className = 'title-input';
   const profile = textarea(state.map.profile, 'School, major, year, where you live, past jobs, clubs, interests…', 4);
@@ -1015,7 +1467,7 @@ function openGoal() {
 function openNewBranch() {
   if (!state.map) return;
   const body = openView({ kind: 'new' });
-  body.append(el('p', 'kicker', 'New branch'), el('h2', null, 'Add a group of people'));
+  body.append(el('p', 'tag', 'New branch'), el('h2', null, 'Add a group of people'));
 
   const name = input('', 'e.g. Climate tech founders in Seattle');
   const query = textarea('', 'e.g. founders of climate tech startups in Seattle who studied at UW', 3);
@@ -1056,7 +1508,7 @@ function openNewBranch() {
 function openMerge(preselected) {
   if (!state.map || state.map.branches.length < 2) return;
   const body = openView({ kind: 'merge' });
-  body.append(el('p', 'kicker', 'Merge branches'), el('h2', null, 'Combine branches'));
+  body.append(el('p', 'tag', 'Merge branches'), el('h2', null, 'Combine branches'));
   body.append(el('p', 'why', 'People are combined and duplicates removed. Pick at least two.'));
 
   const picked = new Set(preselected);
@@ -1133,7 +1585,9 @@ function showDetail() {
   els.detail.setAttribute('aria-hidden', 'false');
   els.detail.inert = false;
   els.detail.scrollTop = 0;
-  if (!wasOpen && autoFit) fitToView(true); // keep the map clear of the panel
+  // Keep the map clear of the panel: refit while auto-fitting, otherwise just bring the selection into view.
+  if (!wasOpen && autoFit) fitToView(true);
+  else requestAnimationFrame(() => ensureVisible(selectedNode()));
 }
 
 function closeDetail() {
@@ -1150,5 +1604,173 @@ function closeDetail() {
 function dismissDetail() {
   if (closeDetail() && state.map && autoFit) fitToView(true);
 }
+
+// ---------------------------------------------------------------------------
+// Resizable panels: drag an edge, use the arrow keys on it, or the widen button.
+// Widths are remembered in this browser and kept within limits that leave the map usable.
+// ---------------------------------------------------------------------------
+
+const SIZE_KEY = 'netprep:panel-sizes';
+const phone = window.matchMedia('(max-width: 760px)');
+const mapWidth = () => document.querySelector('.map').clientWidth;
+
+const panels = {
+  chat: {
+    prop: '--chat-w',
+    edge: 'right', // dragging right makes it wider
+    def: 360,
+    min: 280,
+    max: () => Math.max(280, Math.min(760, window.innerWidth * 0.55)),
+    wide: () => Math.max(280, Math.min(600, window.innerWidth * 0.42)),
+    handle: $('chat-resize'),
+    toggle: $('chat-expand'),
+    box: $('chat'),
+    noun: 'chat',
+  },
+  detail: {
+    prop: '--detail-w',
+    edge: 'left', // dragging left makes it wider
+    def: 380,
+    min: 320,
+    max: () => Math.max(320, Math.min(900, mapWidth() - 240)),
+    wide: () => Math.max(320, Math.min(680, mapWidth() - 300)),
+    handle: $('detail-resize'),
+    toggle: $('detail-expand'),
+    box: els.detail,
+    noun: 'panel',
+  },
+};
+
+const sizes = { chat: panels.chat.def, detail: panels.detail.def };
+const previous = {}; // width to return to when un-widening
+try {
+  Object.assign(sizes, JSON.parse(localStorage.getItem(SIZE_KEY)) ?? {});
+} catch {}
+
+function setSize(name, px, { persist = false } = {}) {
+  const p = panels[name];
+  const max = p.max();
+  sizes[name] = Math.round(Math.min(max, Math.max(p.min, px)));
+  document.documentElement.style.setProperty(p.prop, `${sizes[name]}px`);
+  p.handle.setAttribute('aria-valuemin', String(p.min));
+  p.handle.setAttribute('aria-valuemax', String(Math.round(max)));
+  p.handle.setAttribute('aria-valuenow', String(sizes[name]));
+  syncToggle(name);
+  if (persist) {
+    try { localStorage.setItem(SIZE_KEY, JSON.stringify(sizes)); } catch {}
+  }
+}
+
+function isWide(name) {
+  return phone.matches ? panels[name].box.classList.contains('tall') : sizes[name] >= panels[name].wide() - 8;
+}
+
+function syncToggle(name) {
+  const p = panels[name];
+  const wide = isWide(name);
+  const verb = phone.matches ? (wide ? 'Shrink' : 'Enlarge') : wide ? 'Narrow' : 'Widen';
+  p.toggle.setAttribute('aria-pressed', String(wide));
+  p.toggle.setAttribute('aria-label', `${verb} ${p.noun}`);
+  p.toggle.title = `${verb} ${p.noun}`;
+  const icon = phone.matches
+    ? (wide ? 'arrows-in-line-vertical' : 'arrows-out-line-vertical')
+    : wide ? 'arrows-in-line-horizontal' : 'arrows-out-line-horizontal';
+  p.toggle.innerHTML = `<i class="ph-light ph-${icon}" aria-hidden="true"></i>`;
+}
+
+// The map reacts: refit while auto-fitting, otherwise keep the selection in view.
+let refitFrame = 0;
+function afterResize(name, done) {
+  if (!state.map) return;
+  cancelAnimationFrame(refitFrame);
+  refitFrame = requestAnimationFrame(() => {
+    if (autoFit) fitToView(false);
+    else if (done && name === 'detail') ensureVisible(selectedNode());
+  });
+}
+
+function toggleWide(name) {
+  const p = panels[name];
+  if (phone.matches) {
+    // On phones the panels stack, so "wider" means taller.
+    p.box.classList.toggle('tall');
+    syncToggle(name);
+    return;
+  }
+  if (isWide(name)) {
+    setSize(name, previous[name] && previous[name] < p.wide() - 8 ? previous[name] : p.def, { persist: true });
+  } else {
+    previous[name] = sizes[name];
+    setSize(name, p.wide(), { persist: true });
+  }
+  afterResize(name, true);
+}
+
+for (const [name, p] of Object.entries(panels)) {
+  setSize(name, sizes[name]);
+  p.toggle.addEventListener('click', () => toggleWide(name));
+
+  p.handle.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    p.handle.setPointerCapture(e.pointerId);
+    p.handle.classList.add('dragging');
+    document.body.classList.add('resizing');
+    const startX = e.clientX;
+    const startW = sizes[name];
+    const sign = p.edge === 'right' ? 1 : -1;
+    const move = (ev) => {
+      setSize(name, startW + sign * (ev.clientX - startX));
+      afterResize(name, false);
+    };
+    const end = () => {
+      p.handle.classList.remove('dragging');
+      document.body.classList.remove('resizing');
+      p.handle.removeEventListener('pointermove', move);
+      setSize(name, sizes[name], { persist: true });
+      afterResize(name, true);
+    };
+    p.handle.addEventListener('pointermove', move);
+    p.handle.addEventListener('pointerup', end, { once: true });
+    p.handle.addEventListener('pointercancel', end, { once: true });
+  });
+
+  p.handle.addEventListener('dblclick', () => {
+    setSize(name, p.def, { persist: true });
+    afterResize(name, true);
+  });
+
+  p.handle.addEventListener('keydown', (e) => {
+    const step = e.shiftKey ? 64 : 16;
+    const grow = p.edge === 'right' ? 'ArrowRight' : 'ArrowLeft';
+    const shrink = p.edge === 'right' ? 'ArrowLeft' : 'ArrowRight';
+    let next = null;
+    if (e.key === grow) next = sizes[name] + step;
+    else if (e.key === shrink) next = sizes[name] - step;
+    else if (e.key === 'Home') next = p.min;
+    else if (e.key === 'End') next = p.max();
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleWide(name);
+      return;
+    }
+    if (next === null) return;
+    e.preventDefault();
+    e.stopPropagation(); // arrows resize here; they don't step between people
+    setSize(name, next, { persist: true });
+    afterResize(name, true);
+  });
+}
+
+// Keep saved widths valid when the window changes size or crosses the phone breakpoint.
+window.addEventListener('resize', () => {
+  setSize('chat', sizes.chat);
+  setSize('detail', sizes.detail);
+});
+phone.addEventListener?.('change', () => {
+  syncToggle('chat');
+  syncToggle('detail');
+});
 
 restore();

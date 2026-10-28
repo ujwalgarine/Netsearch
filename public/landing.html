@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>NetPrep · Meet the right people</title>
+  <meta name="description" content="Tell NetPrep your goal. It maps real people worth meeting and writes talking points for each one." />
+  <meta name="theme-color" content="#070806" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500&family=Instrument+Serif:ital@1&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/light/style.css" />
+  <link rel="stylesheet" href="/tokens.css" />
+  <link rel="stylesheet" href="/landing.css" />
+</head>
+<body>
+  <div id="top-sentinel" aria-hidden="true"></div>
+
+  <!-- Nav: floating glass pill -->
+  <header class="nav glass" data-load="0">
+    <a class="logo" href="/"><span class="logo-mark" aria-hidden="true"></span>NetPrep</a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#map">The map</a>
+      <a href="#practice">Practice</a>
+    </nav>
+    <a class="pill pill-primary sm" href="/app">Map my network <i class="ph-light ph-arrow-right arrow" aria-hidden="true"></i></a>
+  </header>
+
+  <main>
+    <!-- Hero -->
+    <section class="hero" aria-labelledby="hero-title">
+      <canvas id="hero-field" class="hero-field" aria-hidden="true"></canvas>
+      <svg id="hero-net" class="hero-net" viewBox="-600 -600 1200 1200" aria-hidden="true"></svg>
+
+      <div class="hero-inner">
+        <a class="announce glass" href="#map" data-load="1">
+          <span class="announce-new">New</span>
+          <span>Real people, found by live search</span>
+          <i class="ph-light ph-caret-right" aria-hidden="true"></i>
+        </a>
+        <h1 id="hero-title" class="display">
+          <span class="line" data-load="2">Meet the right people.</span>
+          <span class="line" data-load="3"><span class="accent">Rehearse</span> the first hello.</span>
+        </h1>
+        <p class="hero-sub" data-load="4">Tell NetPrep your goal. It maps real people worth meeting and writes talking points for each one.</p>
+        <div class="hero-ctas" data-load="5">
+          <a class="pill pill-primary" href="/app">Map my network <i class="ph-light ph-arrow-right arrow" aria-hidden="true"></i></a>
+          <a class="pill pill-ghost" href="#how">See how it works</a>
+        </div>
+        <ul class="checks" data-load="5">
+          <li><i class="ph-light ph-check" aria-hidden="true"></i>Real, linked profiles</li>
+          <li><i class="ph-light ph-check" aria-hidden="true"></i>No LinkedIn login</li>
+          <li><i class="ph-light ph-check" aria-hidden="true"></i>Built for students</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section id="how" class="section how" aria-labelledby="how-title">
+      <div class="wrap">
+        <div class="opener reveal">
+          <h2 id="how-title" class="h1">From one sentence<br />to a <span class="accent">map</span>.</h2>
+          <p class="side-caption">Describe it once, <br />then shape it by hand.</p>
+        </div>
+
+        <div class="steps">
+          <article class="step glass reveal" style="--i: 0">
+            <p class="fig label">Fig. 01</p>
+            <header class="step-head">
+              <span class="icon-tile"><i class="ph-light ph-chat-circle-text" aria-hidden="true"></i></span>
+              <h3>Describe your goal</h3>
+            </header>
+            <p class="step-body">Say who you are and who you want to meet, in plain words.</p>
+            <div class="viz viz-chat" aria-hidden="true">
+              <div class="bubble"><span class="typed" data-text="UW freshman, want a PM internship in Seattle"></span><span class="caret"></span></div>
+              <div class="reply"><i></i><i></i><i></i></div>
+            </div>
+          </article>
+
+          <article class="step glass reveal" style="--i: 1">
+            <p class="fig label">Fig. 02</p>
+            <header class="step-head">
+              <span class="icon-tile"><i class="ph-light ph-tree-structure" aria-hidden="true"></i></span>
+              <h3>Get your map</h3>
+            </header>
+            <p class="step-body">Live people search finds real profiles and sorts them into branches.</p>
+            <div class="viz viz-converge" aria-hidden="true">
+              <svg viewBox="0 0 280 150">
+                <g class="sources">
+                  <rect x="6" y="9" width="34" height="24" rx="7" />
+                  <rect x="6" y="45" width="34" height="24" rx="7" />
+                  <rect x="6" y="81" width="34" height="24" rx="7" />
+                  <rect x="6" y="117" width="34" height="24" rx="7" />
+                </g>
+                <g class="flows">
+                  <path d="M40 21 C 130 21, 130 75, 206 75" />
+                  <path d="M40 57 C 130 57, 130 75, 206 75" />
+                  <path d="M40 93 C 130 93, 130 75, 206 75" />
+                  <path d="M40 129 C 130 129, 130 75, 206 75" />
+                </g>
+                <rect class="hub" x="206" y="47" width="56" height="56" rx="14" />
+                <circle class="hub-dot" cx="234" cy="75" r="7" />
+              </svg>
+            </div>
+          </article>
+
+          <article class="step glass reveal" style="--i: 2">
+            <p class="fig label">Fig. 03</p>
+            <header class="step-head">
+              <span class="icon-tile"><i class="ph-light ph-target" aria-hidden="true"></i></span>
+              <h3>Walk in prepared</h3>
+            </header>
+            <p class="step-body">Each person comes with talking points tied to their actual background.</p>
+            <div class="viz viz-rings" aria-hidden="true">
+              <span class="r r1"></span><span class="r r2"></span><span class="r r3"></span>
+              <span class="sat s1"></span><span class="sat s2"></span><span class="sat s3"></span>
+              <span class="voice"></span>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- The map, up close -->
+    <section id="map" class="section map-section" aria-labelledby="map-title">
+      <div class="wrap">
+        <div class="opener reveal">
+          <h2 id="map-title" class="h1">See who matters,<br />and <span class="accent">why</span>.</h2>
+          <p class="side-caption">Every branch is a <br />reason to reach out.</p>
+        </div>
+        <figure class="shot reveal">
+          <div class="shot-frame">
+            <img src="/assets/map-example.jpg" width="1600" height="1000" loading="lazy"
+              alt="The NetPrep app: a goal on the left branches into four groups of people, and a detail sheet shows one person's background and three talking points." />
+          </div>
+          <figcaption><span class="label">Fig. 04 / The map</span><span>Example map. The people shown are illustrative.</span></figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- Proof, as outcomes (no invented metrics) -->
+    <section class="section proof" aria-labelledby="proof-title">
+      <div class="wrap proof-grid">
+        <div class="proof-copy reveal">
+          <h2 id="proof-title" class="h1">Built to be<br /><span class="accent">checked</span>.</h2>
+          <p class="body">Every suggestion traces back to something you can open and read yourself.</p>
+        </div>
+        <div class="stairs">
+          <article class="outline-card reveal" style="--i: 0; --h: 100%">
+            <span class="ring-mark on" aria-hidden="true"></span>
+            <p class="idx">01</p>
+            <div>
+              <h3>Real profiles</h3>
+              <p>Every person links to a public profile you can open and verify.</p>
+            </div>
+          </article>
+          <article class="outline-card reveal" style="--i: 1; --h: 80%">
+            <span class="ring-mark" aria-hidden="true"></span>
+            <p class="idx">02</p>
+            <div>
+              <h3>Grounded talking points</h3>
+              <p>Written only from what is on their profile, then tied to your goal.</p>
+            </div>
+          </article>
+          <article class="outline-card reveal" style="--i: 2; --h: 62%">
+            <span class="ring-mark" aria-hidden="true"></span>
+            <p class="idx">03</p>
+            <div>
+              <h3>Yours to shape</h3>
+              <p>Rename, merge, and move branches by hand. Undo anything.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Coffee-chat preview -->
+    <section id="practice" class="section practice" aria-labelledby="practice-title">
+      <div class="wrap practice-grid">
+        <div class="practice-copy reveal">
+          <p class="status-tag label"><span class="ring-mark" aria-hidden="true"></span>In development</p>
+          <h2 id="practice-title" class="h1">Practice with<br />their <span class="accent">double</span>.</h2>
+          <p class="body">Rehearse the coffee chat with an agent briefed on the person's real background, then get notes on how it went.</p>
+        </div>
+        <div class="transcript glass reveal" style="--i: 1" aria-label="Preview of a practice conversation">
+          <div class="transcript-head">
+            <span class="label">Practice mode</span>
+            <span class="label">Preview</span>
+          </div>
+          <div class="turn them">
+            <p class="who label">Priya R. · practice double</p>
+            <p>Thanks for reaching out. You mentioned Informatics. What made you curious about product?</p>
+          </div>
+          <div class="turn you">
+            <p>I liked the research side of my HCI class more than the coding. Is that a real path into PM?</p>
+          </div>
+          <div class="turn them">
+            <p class="who label">Priya R. · practice double</p>
+            <p>It was mine. Tell me about one project where your research changed what got built.</p>
+          </div>
+          <div class="turn them typing" aria-hidden="true"><i></i><i></i><i></i></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Closing CTA -->
+    <section class="section closing" aria-labelledby="closing-title">
+      <div class="wrap">
+        <div class="closing-copy reveal">
+          <h2 id="closing-title" class="h1">Your next coffee chat<br />starts with a <span class="accent">map</span>.</h2>
+          <a class="pill pill-primary" href="/app">Map my network <i class="ph-light ph-arrow-right arrow" aria-hidden="true"></i></a>
+        </div>
+        <!-- TODO: replace the dot field with owned macro-moss / particle-mesh art (2400x600), masked the same way. -->
+        <div class="banner reveal" aria-hidden="true">
+          <canvas id="banner-field"></canvas>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-row">
+      <a class="logo" href="/"><span class="logo-mark" aria-hidden="true"></span>NetPrep</a>
+      <nav class="footer-links" aria-label="Footer">
+        <a href="/app">App</a>
+        <a href="#how">How it works</a>
+        <a href="#practice">Practice</a>
+      </nav>
+      <p class="label">© 2026 NetPrep</p>
+    </div>
+  </footer>
+
+  <script src="/field.js"></script>
+  <script src="/landing.js"></script>
+</body>
+</html>
