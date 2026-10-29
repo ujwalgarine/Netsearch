@@ -95,53 +95,74 @@ body { overflow-x: hidden; }
   display: grid;
   place-items: center;
   overflow: hidden;
-  padding: 120px 16px 96px;
+  padding: 120px 16px 200px; /* extra room below the copy for the network root */
   background:
     radial-gradient(55% 45% at 0% 35%, rgba(74, 90, 34, .38), transparent 70%),
     radial-gradient(40% 35% at 90% 100%, rgba(74, 90, 34, .24), transparent 70%),
     var(--bg-0);
+}
+/* Background layer: dot field, network and cursor tethers. landing.js replaces this mask with
+   one feathered ellipse per line of copy, so everything here drops to 12% behind text. */
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(#000, #000), radial-gradient(52% 34% at 50% 48%, rgba(0, 0, 0, .88) 72%, transparent);
+  mask-image: linear-gradient(#000, #000), radial-gradient(52% 34% at 50% 48%, rgba(0, 0, 0, .88) 72%, transparent);
+  -webkit-mask-composite: source-out;
+  mask-composite: subtract;
 }
 .hero-field {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none;
   -webkit-mask-image: linear-gradient(180deg, transparent 20%, #000 65%, transparent);
   mask-image: linear-gradient(180deg, transparent 20%, #000 65%, transparent);
 }
 .hero-net {
+  /* centered on the root, which landing.js parks 96px+ below the trust row (--root-y) */
   position: absolute;
   left: 50%;
-  bottom: -46%;
-  width: min(1180px, 150vw);
+  top: var(--root-y, 88%);
+  width: min(1560px, 150vw);
   aspect-ratio: 1;
-  transform: translateX(-50%);
-  pointer-events: none;
+  transform: translate(-50%, -50%);
   opacity: 0;
   animation: fade-in 1.4s var(--ease-out) .6s forwards;
-  -webkit-mask-image: radial-gradient(closest-side, #000 35%, transparent 92%);
-  mask-image: radial-gradient(closest-side, #000 35%, transparent 92%);
+  -webkit-mask-image: radial-gradient(closest-side, #000 50%, transparent 96%);
+  mask-image: radial-gradient(closest-side, #000 50%, transparent 96%);
 }
 .hero-net .spin { animation: spin 180s linear infinite; transform-origin: 0 0; }
 .hero-net .link { fill: none; stroke: var(--moss-mid); stroke-width: 1.5; stroke-linecap: round; stroke-dasharray: 1 6; }
 .hero-net .link.trunk { stroke: var(--signal-dim); animation: flow 2.4s linear infinite; }
+.hero-net .link.hot { stroke: var(--signal); }
 .hero-net .branch { fill: var(--bg-2); stroke: var(--line-strong); }
 .hero-net .branch-dot { fill: var(--signal); }
 .hero-net .leaf { fill: var(--bg-1); stroke: var(--line-strong); }
 .hero-net .leaf-dot { fill: var(--text-2); }
+.hero-net .node.hot rect { stroke: var(--line-signal); }
+.hero-net .node.hot circle { fill: var(--signal); filter: drop-shadow(0 0 5px rgba(200, 241, 105, .9)); }
+.hero-net .rings { transform-box: fill-box; transform-origin: center; }
 .hero-net .root-ring { fill: none; stroke: var(--line-signal); }
 .hero-net .root { fill: var(--signal); filter: drop-shadow(0 0 10px rgba(200, 241, 105, .8)); }
+.hero-net .particle { fill: var(--signal-soft); filter: drop-shadow(0 0 6px rgba(200, 241, 105, .9)); }
+.hero-tether { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 3px rgba(200, 241, 105, .5)); }
+.hero-tether path { fill: none; stroke: var(--signal); stroke-width: 1.5; stroke-linecap: round; stroke-dasharray: 1 6; }
 
 .hero-inner {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   max-width: 980px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
+.hero-inner > * { position: relative; z-index: 2; }
 .hero-inner::before {
   /* a soft dark pool so the headline always reads over the field and network */
   content: '';
@@ -171,24 +192,61 @@ body { overflow-x: hidden; }
 .hero-sub {
   max-width: 46ch;
   margin: 28px 0 0;
-  font-size: 18px;
+  font-size: 19px;
+  font-weight: 400;
   line-height: 1.55;
-  color: var(--text-2);
+  color: var(--text-1-soft);
 }
 .hero-ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 40px; }
+
+/* Magnetic primary CTA: landing.js eases --tx/--ty (max 6px) and moves the --mx/--my highlight. */
+.hero-ctas .pill-primary {
+  position: relative;
+  isolation: isolate;
+  transform: translate(var(--tx, 0px), var(--ty, 0px));
+  transition: transform var(--t-base) var(--ease-out), box-shadow var(--t-fast) var(--ease-out);
+}
+.hero-ctas .pill-primary:hover { transform: translate(var(--tx, 0px), calc(var(--ty, 0px) - 1px)); }
+.hero-ctas .pill-primary:active { transform: translate(var(--tx, 0px), calc(var(--ty, 0px) + 1px)); }
+.hero-ctas .pill-primary.magnet { transition: box-shadow var(--t-fast) var(--ease-out); }
+.hero-ctas .pill-primary::before {
+  /* only ever lightens the lime under dark text, so contrast goes up, never down */
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: radial-gradient(90px circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, .6), transparent 70%);
+  opacity: 0;
+  transition: opacity var(--t-base) var(--ease-out);
+}
+.hero-ctas .pill-primary.magnet::before { opacity: 1; }
+
 .checks {
   list-style: none;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px 22px;
+  gap: 12px 28px;
   margin: 28px 0 0;
   padding: 0;
-  font-size: 13px;
-  color: var(--text-3);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--text-1) 88%, transparent);
 }
-.checks li { display: inline-flex; align-items: center; gap: 6px; }
-.checks i { color: var(--signal-dim); font-size: 14px; }
+.checks li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: rgba(14, 16, 12, .72);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.checks svg { flex: none; width: 16px; height: 16px; fill: none; stroke: var(--signal); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ---------------- How it works (6.5) ---------------- */
 
@@ -404,8 +462,8 @@ body { overflow-x: hidden; }
   .nav { top: 12px; width: calc(100% - 24px); padding-left: 16px; }
   .nav-links { display: none; }
   .hero { padding: 104px 16px 80px; }
-  .hero-sub { font-size: 16px; }
-  .hero-net { bottom: -30%; }
+  .hero-sub { font-size: 17px; }
+  .checks { flex-direction: column; align-items: center; gap: 10px; }
   .opener { flex-direction: column; gap: 14px; margin-bottom: 40px; }
   .side-caption br { display: none; }
   .steps { grid-template-columns: 1fr; }

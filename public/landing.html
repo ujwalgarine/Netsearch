@@ -30,8 +30,11 @@
   <main>
     <!-- Hero -->
     <section class="hero" aria-labelledby="hero-title">
-      <canvas id="hero-field" class="hero-field" aria-hidden="true"></canvas>
-      <svg id="hero-net" class="hero-net" viewBox="-600 -600 1200 1200" aria-hidden="true"></svg>
+      <div class="hero-bg" aria-hidden="true">
+        <canvas id="hero-field" class="hero-field"></canvas>
+        <svg id="hero-net" class="hero-net" viewBox="-600 -600 1200 1200"></svg>
+        <svg id="hero-tether" class="hero-tether"></svg>
+      </div>
 
       <div class="hero-inner">
         <a class="announce glass" href="#map" data-load="1">
@@ -43,15 +46,15 @@
           <span class="line" data-load="2">Meet the right people.</span>
           <span class="line" data-load="3"><span class="accent">Rehearse</span> the first hello.</span>
         </h1>
-        <p class="hero-sub" data-load="4">Tell NetPrep your goal. It maps real people worth meeting and writes talking points for each one.</p>
+        <p class="hero-sub" data-load="4">Tell <span translate="no">NetPrep</span> your goal. It maps real people worth meeting and writes talking points for each one.</p>
         <div class="hero-ctas" data-load="5">
           <a class="pill pill-primary" href="/app">Map my network <i class="ph-light ph-arrow-right arrow" aria-hidden="true"></i></a>
           <a class="pill pill-ghost" href="#how">See how it works</a>
         </div>
         <ul class="checks" data-load="5">
-          <li><i class="ph-light ph-check" aria-hidden="true"></i>Real, linked profiles</li>
-          <li><i class="ph-light ph-check" aria-hidden="true"></i>No LinkedIn login</li>
-          <li><i class="ph-light ph-check" aria-hidden="true"></i>Built for students</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>Real, linked profiles</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>No LinkedIn login</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>Built for students</li>
         </ul>
       </div>
     </section>

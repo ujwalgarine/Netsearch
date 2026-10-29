@@ -1,6 +1,7 @@
 // Dot-matrix wave field (design.md 5.3): a grid of small dots that swells into a slow,
 // drifting wave. Shared by the landing page and the app's map background.
 // Pauses when off screen or in a background tab; draws one still frame under reduced motion.
+// With `manual: true` the caller owns the loop and calls the returned draw(now) itself.
 
 (function () {
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -14,6 +15,9 @@
       spread: 0.16,   // how tall the swollen band is
       speed: 1,       // 1 = one slow drift loop in about 20s
       rest: 0.09,     // dot opacity away from the crest
+      manual: false,  // true: no loop or observers of its own; returns { draw }
+      spot: null,     // optional () => { x, y, k, mask(x, y) } lighting dots near a point, or null
+      spotRadius: 160,
       ...options,
     };
     const ctx = canvas.getContext('2d');
@@ -40,6 +44,8 @@
       const t = ((now - start) / 20000) * Math.PI * 2 * o.speed;
       ctx.clearRect(0, 0, width, height);
       const s2 = 2 * o.spread * o.spread;
+      const spot = o.spot && o.spot();
+      const R = o.spotRadius;
       for (let y = o.gap / 2; y < height; y += o.gap) {
         const ny = y / height;
         for (let x = o.gap / 2; x < width; x += o.gap) {
@@ -49,13 +55,27 @@
           const band = Math.exp(-((ny - crestY) ** 2) / s2);
           const ripple = 0.65 + 0.35 * Math.sin(nx * 38 - t * 3 + ny * 9);
           const k = band * ripple;
-          const r = o.base + o.swell * k;
-          if (k > 0.55) {
-            // Near the crest, dots pick up a little moss-lime (signal-dim, not full signal).
-            ctx.fillStyle = `rgba(143, 174, 79, ${0.25 + 0.55 * k})`;
-          } else {
-            ctx.fillStyle = `rgba(230, 240, 210, ${o.rest + 0.3 * k})`;
+          let r = o.base + o.swell * k;
+          // Near the crest, dots pick up a little moss-lime (signal-dim, not full signal).
+          const crest = k > 0.55;
+          let cr = crest ? 143 : 230;
+          let cg = crest ? 174 : 240;
+          let cb = crest ? 79 : 210;
+          let ca = crest ? 0.25 + 0.55 * k : o.rest + 0.3 * k;
+          if (spot) {
+            const d2 = (x - spot.x) ** 2 + (y - spot.y) ** 2;
+            if (d2 < R * R) {
+              // Spotlight: smoothstep falloff toward full signal lime and 2.2x size.
+              const u = 1 - Math.sqrt(d2) / R;
+              const f = u * u * (3 - 2 * u) * spot.k * (spot.mask ? spot.mask(x, y) : 1);
+              cr += (200 - cr) * f;
+              cg += (241 - cg) * f;
+              cb += (105 - cb) * f;
+              ca += (0.95 - ca) * f;
+              r *= 1 + 1.2 * f;
+            }
           }
+          ctx.fillStyle = `rgba(${cr | 0}, ${cg | 0}, ${cb | 0}, ${ca})`;
           ctx.fillRect(x - r / 2, y - r / 2, r, r);
         }
       }
@@ -74,6 +94,10 @@
     }
 
     new ResizeObserver(resize).observe(canvas);
+    if (o.manual) {
+      resize();
+      return { draw };
+    }
     new IntersectionObserver(([entry]) => {
       onScreen = entry.isIntersecting;
       sync();
