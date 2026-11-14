@@ -11,20 +11,42 @@
   <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/light/style.css" />
   <link rel="stylesheet" href="/tokens.css" />
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/shell.css" />
+  <link rel="stylesheet" href="/insights.css" />
 </head>
 <body>
-  <div class="app">
+  <div class="shell">
+  <!-- Sidebar (a bottom tab bar on phones) -->
+  <nav class="sidebar" aria-label="App">
+    <a class="logo sidebar-logo" href="/"><span class="logo-mark" aria-hidden="true"></span><span id="app-name">NetPrep</span></a>
+    <ul class="side-nav">
+      <li><a class="side-link" href="/app" data-nav="map"><i class="ph-light ph-plus-circle" aria-hidden="true"></i><span>New map</span></a></li>
+      <li><a class="side-link" href="/app/chats" data-nav="chats"><i class="ph-light ph-chats-circle" aria-hidden="true"></i><span>Past chats</span></a></li>
+      <li><a class="side-link" href="/app/connections" data-nav="connections"><i class="ph-light ph-users-three" aria-hidden="true"></i><span>Connections</span></a></li>
+      <li><a class="side-link" href="/app/practice" data-nav="practice"><i class="ph-light ph-microphone" aria-hidden="true"></i><span>Practice</span></a></li>
+      <li><a class="side-link" href="/app/insights" data-nav="insights"><i class="ph-light ph-chart-line-up" aria-hidden="true"></i><span>Insights</span></a></li>
+      <li class="side-account-tab"><a class="side-link" href="/app/account" data-nav="account"><i class="ph-light ph-user-circle" aria-hidden="true"></i><span>Account</span></a></li>
+    </ul>
+    <div class="side-account">
+      <a class="side-user" href="/app/account" data-nav="account">
+        <span class="avatar sm" id="side-initials" aria-hidden="true"></span>
+        <span class="side-user-text"><span class="side-name" id="side-name">Account</span><span class="label">Account</span></span>
+      </a>
+      <button id="side-signout" class="icon-btn" type="button" aria-label="Sign out" title="Sign out"><i class="ph-light ph-sign-out" aria-hidden="true"></i></button>
+    </div>
+  </nav>
+
+  <main class="views">
+  <div class="app" id="view-map" data-view="map">
     <!-- Top bar -->
     <header class="topbar">
       <button id="chat-toggle" class="icon-btn" aria-controls="chat" aria-expanded="true" aria-label="Hide chat" title="Hide chat (\)"><i class="ph-light ph-sidebar-simple" aria-hidden="true"></i></button>
-      <a class="logo" href="/"><span class="logo-mark" aria-hidden="true"></span><span id="app-name">NetPrep</span></a>
       <span class="topbar-goal label" id="map-title">No map yet</span>
       <span id="mode-badge" class="badge label" hidden>Demo data</span>
       <div class="toolbar" role="toolbar" aria-label="Map tools">
         <button id="undo" class="mono-btn" disabled title="Undo (Ctrl/Cmd+Z)"><i class="ph-light ph-arrow-counter-clockwise" aria-hidden="true"></i>Undo</button>
         <button id="add-branch" class="mono-btn" disabled><i class="ph-light ph-plus" aria-hidden="true"></i>Branch</button>
         <button id="merge" class="mono-btn" disabled><i class="ph-light ph-git-merge" aria-hidden="true"></i>Merge</button>
-        <button id="reset" class="mono-btn" disabled>New map</button>
       </div>
     </header>
 
@@ -91,8 +113,186 @@
     </div>
   </div>
 
+  <!-- Past chats -->
+  <section class="page-view" id="view-chats" data-view="chats" aria-labelledby="chats-title" hidden>
+    <header class="page-head">
+      <p class="label">Fig. 02 · Archive</p>
+      <h1 id="chats-title" class="page-title">Past <span class="accent">chats</span></h1>
+    </header>
+    <div class="page-tools">
+      <label class="search-field">
+        <i class="ph-light ph-magnifying-glass" aria-hidden="true"></i>
+        <span class="sr-only">Search chats by title</span>
+        <input id="chats-search" type="search" placeholder="Search by title" autocomplete="off" />
+      </label>
+    </div>
+    <div id="chats-list" class="chats-list"></div>
+    <div id="chats-empty" class="page-empty" hidden>
+      <div class="empty-rings" aria-hidden="true"><span></span><span></span><i></i></div>
+      <p id="chats-empty-text">No chats yet.</p>
+      <a class="pill pill-primary sm" href="/app" data-nav="map">Start a map <i class="ph-light ph-arrow-right arrow" aria-hidden="true"></i></a>
+    </div>
+  </section>
+
+  <!-- Sections built in later steps -->
+  <section class="page-view" id="view-connections" data-view="connections" aria-labelledby="connections-title" hidden>
+    <header class="page-head">
+      <p class="label">Fig. 03 · People</p>
+      <h1 id="connections-title" class="page-title">Connections</h1>
+    </header>
+    <div class="page-tools conn-tools" role="search">
+      <label class="search-field">
+        <i class="ph-light ph-magnifying-glass" aria-hidden="true"></i>
+        <span class="sr-only">Search by name, title or organization</span>
+        <input id="conn-search" type="search" placeholder="Search name, title, organization" autocomplete="off" />
+      </label>
+      <label class="select-field"><span class="sr-only">Status</span>
+        <select id="conn-status">
+          <option value="tracked">All tracked</option>
+          <option value="saved">Saved</option>
+          <option value="contacted">Contacted</option>
+          <option value="replied">Replied</option>
+          <option value="meeting_set">Meeting set</option>
+          <option value="met">Met</option>
+          <option value="suggested">Suggested only</option>
+          <option value="all">Everyone, incl. suggested</option>
+        </select>
+      </label>
+      <label class="select-field"><span class="sr-only">Branch</span><select id="conn-branch"><option value="">All branches</option></select></label>
+      <label class="select-field"><span class="sr-only">Map</span><select id="conn-convo"><option value="">All maps</option></select></label>
+    </div>
+    <p id="conn-count" class="label conn-count" hidden></p>
+    <div id="conn-table-wrap" class="conn-table-wrap" hidden>
+      <table class="conn-table">
+        <thead>
+          <tr><th scope="col">Person</th><th scope="col">Organization</th><th scope="col">Branch</th><th scope="col">Status</th><th scope="col">Next follow-up</th><th scope="col">Updated</th></tr>
+        </thead>
+        <tbody id="conn-rows"></tbody>
+      </table>
+    </div>
+    <div id="conn-empty" class="page-empty" hidden>
+      <div class="empty-rings" aria-hidden="true"><span></span><span></span><i></i></div>
+      <p id="conn-empty-text">Save a connection from your map to start tracking outreach.</p>
+      <a class="pill pill-primary sm" href="/app/chats" data-nav="chats">Open a map <i class="ph-light ph-arrow-right arrow" aria-hidden="true"></i></a>
+    </div>
+    <aside id="conn-detail" class="detail conn-detail" aria-label="Connection details" aria-hidden="true" inert>
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <button id="conn-detail-close" class="detail-close" aria-label="Close"><i class="ph-light ph-x" aria-hidden="true"></i></button>
+      <div id="conn-detail-body"></div>
+    </aside>
+  </section>
+  <section class="page-view" id="view-practice" data-view="practice" aria-labelledby="practice-title" hidden>
+    <header class="page-head">
+      <p class="label">Fig. 04 · Rehearse</p>
+      <h1 id="practice-title" class="page-title">Practice</h1>
+    </header>
+    <div class="page-empty">
+      <div class="empty-rings" aria-hidden="true"><span></span><span></span><i></i></div>
+      <p>Coffee-chat practice will live here.</p>
+    </div>
+  </section>
+  <section class="page-view" id="view-insights" data-view="insights" aria-labelledby="insights-title" hidden>
+    <header class="page-head">
+      <p class="label">Fig. 05 · Signal</p>
+      <h1 id="insights-title" class="page-title">Insights</h1>
+    </header>
+    <div id="insights-body" class="insights">
+      <div id="kpi-row" class="kpi-row" aria-label="Key numbers"></div>
+      <div id="kpi-note" class="kpi-note" hidden></div>
+
+      <div class="insight-grid">
+        <article class="chart-card span-7" aria-labelledby="funnel-title">
+          <header class="card-head"><h2 id="funnel-title">Outreach funnel</h2><button class="table-toggle mono-btn" type="button" aria-pressed="false">Table</button></header>
+          <p class="card-sub">How many connections reached each stage, and how many moved on.</p>
+          <div id="chart-funnel" class="chart"></div>
+        </article>
+        <article class="chart-card span-5" aria-labelledby="followups-title">
+          <header class="card-head"><h2 id="followups-title">Follow-ups due</h2></header>
+          <p class="card-sub">Dates that have passed, and people contacted a week ago with no reply.</p>
+          <div id="followups"></div>
+        </article>
+        <article class="chart-card span-12" aria-labelledby="mix-title">
+          <header class="card-head"><h2 id="mix-title">Network mix</h2><button class="table-toggle mono-btn" type="button" aria-pressed="false">Table</button></header>
+          <p class="card-sub">Where your saved connections come from.</p>
+          <div class="mix-grid">
+            <section aria-labelledby="mix-branch-title"><h3 id="mix-branch-title" class="label">By branch</h3><div id="chart-mix-branch" class="chart"></div></section>
+            <section aria-labelledby="mix-org-title"><h3 id="mix-org-title" class="label">By organization · top 8</h3><div id="chart-mix-org" class="chart"></div></section>
+          </div>
+        </article>
+        <article class="chart-card span-12" aria-labelledby="activity-title">
+          <header class="card-head"><h2 id="activity-title">Activity</h2><button class="table-toggle mono-btn" type="button" aria-pressed="false">Table</button></header>
+          <p class="card-sub">Per week, last 12 weeks.</p>
+          <div id="chart-activity" class="chart"></div>
+        </article>
+      </div>
+
+      <section class="tips-section" aria-labelledby="tips-title">
+        <header class="tips-head">
+          <div>
+            <p class="label">Fig. 05b · Tips</p>
+            <h2 id="tips-title" class="tips-title">Networking <span class="accent">tips</span></h2>
+            <p id="tips-note" class="label tips-note" hidden></p>
+          </div>
+          <button id="tips-refresh" class="pill pill-ghost sm" type="button"><i class="ph-light ph-arrows-clockwise" aria-hidden="true"></i>Refresh tips</button>
+        </header>
+        <div id="tips" class="tips" aria-live="polite"></div>
+      </section>
+    </div>
+    <div id="chart-tip" class="chart-tip" role="tooltip" hidden></div>
+  </section>
+
+  <!-- Account -->
+  <section class="page-view" id="view-account" data-view="account" aria-labelledby="account-title" hidden>
+    <header class="page-head">
+      <p class="label">Fig. 06 · You</p>
+      <h1 id="account-title" class="page-title">Account</h1>
+    </header>
+    <div class="account-grid">
+      <div class="data-panel account-panel">
+        <div class="data-row"><span class="k">Name</span><span class="v" id="account-name"></span></div>
+        <div class="data-row"><span class="k">Email</span><span class="v" id="account-email"></span></div>
+      </div>
+      <button id="account-signout" class="pill pill-ghost sm account-signout" type="button"><i class="ph-light ph-sign-out" aria-hidden="true"></i>Sign out</button>
+
+      <details class="danger-zone" id="delete-zone">
+        <summary>Delete account</summary>
+        <form id="delete-form" class="editor" novalidate>
+          <p class="why">This permanently deletes your account, every chat, map and saved connection. It can't be undone.</p>
+          <label class="field">
+            <span class="field-label">Password</span>
+            <input id="delete-password" type="password" autocomplete="current-password" required />
+          </label>
+          <label class="field">
+            <span class="field-label">Type DELETE to confirm</span>
+            <input id="delete-confirm" type="text" autocomplete="off" spellcheck="false" required />
+          </label>
+          <p id="delete-error" class="field-error" role="alert" hidden></p>
+          <div class="row"><button id="delete-submit" class="btn danger-solid" type="submit" disabled>Delete my account</button></div>
+        </form>
+      </details>
+    </div>
+  </section>
+  </main>
+  </div>
+
+  <!-- Confirm dialog (deleting a chat) -->
+  <dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <p class="label">Confirm</p>
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-body" class="why"></p>
+      <div class="row">
+        <button value="cancel" class="btn secondary" type="submit">Cancel</button>
+        <button value="ok" id="confirm-ok" class="btn danger-solid" type="submit">Delete</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
   <script src="/field.js"></script>
   <script src="/app.js"></script>
+  <script src="/connections.js"></script>
+  <script src="/insights.js"></script>
+  <script src="/shell.js"></script>
 </body>
 </html>

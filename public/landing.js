@@ -402,3 +402,14 @@ if (reduceMotion) {
     if (entry.isIntersecting) tick();
   }).observe(typed.closest('.step'));
 }
+
+// Signed in: "Map my network" opens the app and the nav offers "Open app" instead of sign in / sign up.
+fetch('/api/auth/session')
+  .then((r) => (r.ok ? r.json() : { signedIn: false }))
+  .then(({ signedIn }) => {
+    if (!signedIn) return;
+    document.querySelectorAll('[data-cta]').forEach((a) => { a.href = '/app'; });
+    document.getElementById('nav-guest').hidden = true;
+    document.getElementById('nav-user').hidden = false;
+  })
+  .catch(() => {});

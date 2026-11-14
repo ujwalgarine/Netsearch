@@ -1,29 +1,87 @@
 import 'dotenv/config';
 import express from 'express';
+import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 import OpenAI from 'openai';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mockPlan, mockPeople } from './mock.js';
 import { exaPeopleSearch, enrichPeople, UpstreamError } from './people.js';
+import { createAuth, sameOriginOnly } from './lib/auth.js';
+import * as store from './lib/store.js';
+import * as insights from './lib/insights.js';
+import rateLimit from 'express-rate-limit';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT ?? 3000;
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const apiKey = process.env.OPENAI_API_KEY?.trim();
 const exaKey = process.env.EXA_API_KEY?.trim();
+const production = process.env.NODE_ENV === 'production';
 
 // No key (or the placeholder from .env) -> run with demo data so the UI still works.
 const hasRealKey = Boolean(apiKey) && !apiKey.startsWith('sk-your');
 const openai = hasRealKey ? new OpenAI({ apiKey }) : null;
 const hasExa = Boolean(exaKey) && !exaKey.startsWith('your-');
 
+// Accounts (Supabase). Only the publishable/anon key is used; row level security in
+// supabase/schema.sql protects the data. It is used on this server only.
+const supabaseUrl = process.env.SUPABASE_URL?.trim();
+const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
+const hasAccounts = Boolean(supabaseUrl && supabaseKey && !supabaseUrl.includes('your-project'));
+
+const auth = hasAccounts ? createAuth({ supabaseUrl, supabaseKey, production }) : accountsOff();
+
 const app = express();
+app.disable('x-powered-by');
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        'default-src': ["'self'"],
+        'script-src': ["'self'", 'https://cdnjs.cloudflare.com'],
+        // 'unsafe-inline' covers the landing page's style="--i: 0" attributes; no inline scripts are allowed.
+        'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://unpkg.com'],
+        'font-src': ["'self'", 'https://fonts.gstatic.com', 'https://unpkg.com'],
+        'img-src': ["'self'", 'data:', 'https:'], // profile photos come from many hosts
+        'connect-src': ["'self'"],
+        'upgrade-insecure-requests': production ? [] : null,
+      },
+    },
+    strictTransportSecurity: production,
+  }),
+);
 app.use(express.json({ limit: '1mb' }));
+app.use(cookieParser());
+// Sites allowed to send writes besides this host: APP_ORIGIN (comma-separated) and, in a
+// GitHub Codespace, this port's forwarded https://<codespace>-<port>.app.github.dev address.
+const trustedOrigins = (process.env.APP_ORIGIN ?? '').split(',').map((o) => o.trim()).filter(Boolean);
+if (process.env.CODESPACE_NAME && process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN) {
+  trustedOrigins.push(`https://${process.env.CODESPACE_NAME}-${PORT}.${process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}`);
+}
+app.use(sameOriginOnly(trustedOrigins));
+
 const publicDir = path.join(__dirname, 'public');
-app.get('/', (_req, res) => res.sendFile(path.join(publicDir, 'landing.html')));
-app.get('/app', (_req, res) => res.sendFile(path.join(publicDir, 'app.html')));
+const page = (file) => (_req, res) => res.sendFile(path.join(publicDir, file));
+const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+// Pages are only served through their guarded routes, never as raw .html files.
+app.get(['/landing.html', '/app.html', '/login.html', '/signup.html'], (req, res) =>
+  res.redirect(req.path === '/landing.html' ? '/' : req.path.replace(/\.html$/, '')),
+);
+app.use(['/api', '/app', '/login', '/signup'], auth.attach);
+
+app.get('/', page('landing.html'));
+app.get('/login', auth.redirectIfSignedIn, page('login.html'));
+app.get('/signup', auth.redirectIfSignedIn, page('signup.html'));
+app.get(['/app', '/app/*'], auth.requirePageUser, page('app.html'));
 app.use(express.static(publicDir, { index: false }));
+
+app.use('/api/auth', auth.router);
+app.use('/api', auth.requireApiUser); // everything below needs a signed-in user
 
 // ---------------------------------------------------------------------------
 // Planning: the model decides the branches (categories of people) and how to
@@ -76,49 +134,206 @@ Rules:
   Set refresh=true only for branches whose people should be searched again. New branches use id "".
 - If key details are missing (school, field, location), still produce a map, and ask for the one detail that would improve it most in your reply.`;
 
+
 app.get('/api/status', (_req, res) => {
   res.json({ mock: !openai, people: Boolean(openai && hasExa), model: MODEL });
 });
 
-app.post('/api/plan', async (req, res) => {
-  const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
-  const map = req.body?.map ?? null;
-  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+app.delete('/api/account', wrap((req, res) => auth.deleteAccount(req, res)));
 
-  if (!lastUser?.content?.trim()) {
-    return res.status(400).json({ error: 'Send at least one message.' });
+// ---------------------------------------------------------------------------
+// Saved chats
+// ---------------------------------------------------------------------------
+
+app.get('/api/conversations', wrap(async (req, res) => {
+  res.json({ conversations: await store.listConversations(req.auth.db, req.auth.user.id) });
+}));
+
+app.get('/api/conversations/:id', wrap(async (req, res) => {
+  const convo = await store.loadConversation(req.auth.db, req.auth.user.id, req.params.id);
+  if (!convo) return notFound(res);
+  res.json(convo);
+}));
+
+app.patch('/api/conversations/:id', wrap(async (req, res) => {
+  const title = String(req.body?.title ?? '').trim();
+  if (!title) return res.status(400).json({ error: 'Give the chat a name.' });
+  const convo = await store.renameConversation(req.auth.db, req.auth.user.id, req.params.id, title);
+  if (!convo) return notFound(res);
+  res.json(convo);
+}));
+
+app.delete('/api/conversations/:id', wrap(async (req, res) => {
+  const deleted = await store.deleteConversation(req.auth.db, req.auth.user.id, req.params.id);
+  if (!deleted) return notFound(res);
+  res.json({ ok: true });
+}));
+
+// The map after manual edits or finished people searches (updates the latest version).
+app.put('/api/conversations/:id/map', wrap(async (req, res) => {
+  const { db, user } = req.auth;
+  const map = req.body?.map;
+  if (!map || typeof map !== 'object' || !Array.isArray(map.branches)) {
+    return res.status(400).json({ error: 'Send the map to save.' });
   }
+  if (!(await store.getConversation(db, user.id, req.params.id))) return notFound(res);
+  const version = await store.saveLatestMap(db, user.id, req.params.id, map);
+  await store.touchConversation(db, user.id, req.params.id);
+  res.json({ ok: true, version });
+}));
+
+// Track a person from the map (by their id on the map): status, notes, follow-up date.
+app.patch('/api/conversations/:id/connections', wrap(async (req, res) => {
+  const { fields, error } = store.connectionPatch(req.body);
+  if (error) return res.status(400).json({ error });
+  const row = await store.updatePersonConnection(req.auth.db, req.auth.user.id, req.params.id, req.body?.personKey, fields);
+  if (!row) return notFound(res);
+  res.json({ ...row, personKey: row.person_key });
+}));
+
+// ---------------------------------------------------------------------------
+// Connections (outreach tracking)
+// ---------------------------------------------------------------------------
+
+app.get('/api/connections', wrap(async (req, res) => {
+  const { db, user } = req.auth;
+  const filters = {
+    status: String(req.query.status ?? 'tracked'),
+    branch: String(req.query.branch ?? ''),
+    conversation: String(req.query.conversation ?? ''),
+    q: String(req.query.q ?? ''),
+  };
+  const [connections, facets] = await Promise.all([
+    store.listConnections(db, user.id, filters),
+    req.query.facets === '1' ? store.connectionFacets(db, user.id) : null,
+  ]);
+  res.json({ connections, ...(facets ? { facets } : {}) });
+}));
+
+app.patch('/api/connections/:id', wrap(async (req, res) => {
+  const { fields, error } = store.connectionPatch(req.body);
+  if (error) return res.status(400).json({ error });
+  const row = await store.updateConnection(req.auth.db, req.auth.user.id, req.params.id, fields);
+  if (!row) return notFound(res);
+  res.json(row);
+}));
+
+// ---------------------------------------------------------------------------
+// Insights: analytics from the user's own rows, and tips from a summary of their network
+// ---------------------------------------------------------------------------
+
+app.get('/api/insights/summary', wrap(async (req, res) => {
+  res.json(await insights.insightsSummary(req.auth.db, req.auth.user.id, { today: req.query.today }));
+}));
+
+// LLM endpoints: 20 requests per 10 minutes per user.
+const llmLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 20,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req) => req.auth.user.id,
+  handler: (_req, res) => res.status(429).json({ error: 'Too many tip refreshes. Try again in a few minutes.' }),
+});
+
+app.post('/api/insights/tips', llmLimiter, wrap(async (req, res) => {
+  try {
+    res.json(await insights.getTips(req.auth.db, req.auth.user.id, { openai, model: MODEL }));
+  } catch (err) {
+    if (err instanceof store.StoreError) throw err;
+    return sendError(res, err);
+  }
+}));
+
+// ---------------------------------------------------------------------------
+// One chat turn: plan the map, then save the user message, the reply and the new map version.
+// ---------------------------------------------------------------------------
+
+app.post('/api/network', wrap(async (req, res) => {
+  const { db, user } = req.auth;
+  const message = String(req.body?.message ?? '').trim().slice(0, 8000);
+  if (!message) return res.status(400).json({ error: 'Send at least one message.' });
+
+  let conversationId = req.body?.conversationId ?? null;
+  let history = [];
+  let previous = null;
+  if (conversationId) {
+    if (!(await store.getConversation(db, user.id, conversationId))) return notFound(res);
+    [history, previous] = await Promise.all([
+      store.getMessages(db, user.id, conversationId),
+      store.getLatestMap(db, user.id, conversationId),
+    ]);
+  }
+  const prevMap = previous?.data_json ?? null;
+  const messages = [...history.map((m) => ({ role: m.role, content: m.content })), { role: 'user', content: message }];
+
+  let plan;
+  try {
+    plan = await planTurn(messages, prevMap);
+  } catch (err) {
+    return sendError(res, err);
+  }
+
+  const map = mergePlan(prevMap, plan);
+  if (!conversationId) conversationId = (await store.createConversation(db, user.id, plan.goal)).id;
+  await store.addMessages(db, user.id, conversationId, [
+    { role: 'user', content: message },
+    { role: 'assistant', content: plan.reply },
+  ]);
+  await store.addMapVersion(db, user.id, conversationId, map);
+  await store.touchConversation(db, user.id, conversationId);
+
+  res.json({
+    conversationId,
+    reply: plan.reply,
+    goal: plan.goal,
+    profile: plan.profile,
+    // Same branch list the planner returned, with ids filled in for new branches.
+    branches: plan.branches.map((b, i) => ({ ...b, id: map.branches[i].id })),
+    ...(plan.mock ? { mock: true } : {}),
+  });
+}));
+
+// The planner, unchanged: the model (or demo data) turns the conversation and current map into branches.
+async function planTurn(messages, map) {
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
 
   if (!openai) {
     // Small delay so the loading state is visible in demo mode.
     await new Promise((r) => setTimeout(r, 700));
-    return res.json({ ...mockPlan(lastUser.content, map), mock: true });
+    return { ...mockPlan(lastUser.content, map), mock: true };
   }
 
-  try {
-    const history = messages.slice(-12).map((m) => ({
-      role: m.role === 'assistant' ? 'assistant' : 'user',
-      content: String(m.content ?? '').slice(0, 8000),
-    }));
-    const context = map
-      ? [{ role: 'system', content: `Current map, including the user's manual edits:\n${JSON.stringify(compactMap(map))}` }]
-      : [];
+  const history = messages.slice(-12).map((m) => ({
+    role: m.role === 'assistant' ? 'assistant' : 'user',
+    content: String(m.content ?? '').slice(0, 8000),
+  }));
+  const context = map
+    ? [{ role: 'system', content: `Current map, including the user's manual edits:\n${JSON.stringify(compactMap(map))}` }]
+    : [];
 
-    const completion = await openai.chat.completions.create({
-      model: MODEL,
-      messages: [{ role: 'system', content: PLAN_PROMPT }, ...context, ...history],
-      response_format: { type: 'json_schema', json_schema: { name: 'network_plan', strict: true, schema: planSchema } },
-    });
+  const completion = await openai.chat.completions.create({
+    model: MODEL,
+    messages: [{ role: 'system', content: PLAN_PROMPT }, ...context, ...history],
+    response_format: { type: 'json_schema', json_schema: { name: 'network_plan', strict: true, schema: planSchema } },
+  });
 
-    const message = completion.choices[0]?.message;
-    if (message?.refusal) {
-      return res.status(422).json({ error: message.refusal });
-    }
-    return res.json(JSON.parse(message.content));
-  } catch (err) {
-    return sendError(res, err);
-  }
-});
+  const message = completion.choices[0]?.message;
+  if (message?.refusal) throw new UpstreamError('openai', 422, message.refusal);
+  return JSON.parse(message.content);
+}
+
+// Apply a plan to the saved map the same way the browser does: kept branches keep their people,
+// new or refreshed branches start empty (the browser then searches for their people).
+function mergePlan(prevMap, plan) {
+  const prev = new Map((prevMap?.branches ?? []).map((b) => [b.id, b]));
+  const branches = plan.branches.map((p) => {
+    const old = p.id ? prev.get(p.id) : null;
+    if (old && !p.refresh) return { ...old, label: p.label, why: p.why, query: p.query };
+    return { id: old?.id ?? `b${crypto.randomUUID().replace(/-/g, '').slice(0, 14)}`, label: p.label, why: p.why, query: p.query, people: [], status: 'done', error: null, token: null };
+  });
+  return { goal: plan.goal, profile: plan.profile, branches };
+}
 
 function compactMap(map) {
   return {
@@ -134,9 +349,6 @@ function compactMap(map) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// People for one branch: Exa finds real profiles, the model writes the details.
-// ---------------------------------------------------------------------------
 app.post('/api/people', async (req, res) => {
   const branch = req.body?.branch ?? {};
   const query = String(branch.query ?? '').trim().slice(0, 500);
@@ -195,8 +407,38 @@ function sendError(res, err) {
   return res.status(status).json({ error: hint });
 }
 
-app.listen(PORT, () => {
-  console.log(`\n  Network prototype running at http://localhost:${PORT} (app at /app)`);
+
+const notFound = (res) => res.status(404).json({ error: 'Not found.' });
+
+// Any error a route didn't handle: JSON, never a stack trace.
+app.use((err, _req, res, _next) => {
+  if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid JSON.' });
+  if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'That map is too large to save.' });
+  console.error('[server]', err?.message ?? err, err?.cause?.message ?? '');
+  res.status(500).json({ error: err instanceof store.StoreError ? `${err.message} Try again.` : 'Something went wrong. Try again.' });
+});
+
+// Without Supabase settings the pages still load, and every account action explains what's missing.
+function accountsOff() {
+  const off = (_req, res) =>
+    res.status(503).json({ error: 'Accounts are off: add SUPABASE_URL and SUPABASE_ANON_KEY to .env and restart the server.' });
+  const router = express.Router();
+  router.get('/session', (_req, res) => res.json({ signedIn: false }));
+  router.use(off);
+  return {
+    attach: (req, _res, next) => { req.auth = null; next(); },
+    requireApiUser: (_req, res) => res.status(401).json({ error: 'Sign in to continue.' }),
+    requirePageUser: (req, res) => res.redirect(`/login?next=${encodeURIComponent(req.originalUrl)}`),
+    redirectIfSignedIn: (_req, _res, next) => next(),
+    router,
+    deleteAccount: off,
+  };
+}
+
+const server = app.listen(PORT, () => {
+  const port = server.address().port;
+  console.log(`\n  Network prototype running at http://localhost:${port} (app at /app)`);
+  console.log(hasAccounts ? '  Accounts: ON (Supabase)' : '  Accounts: OFF (add SUPABASE_URL and SUPABASE_ANON_KEY to .env to turn on)');
   if (!openai) {
     console.log('  No OpenAI key found: running with demo data. Add your key to .env and restart.\n');
   } else {

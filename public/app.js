@@ -1,6 +1,5 @@
 // Working title shown in the header. Change it here.
 const APP_NAME = 'NetPrep';
-const STORE_KEY = 'netprep:v2';
 const PEOPLE_PER_SEARCH = 4;
 
 const state = {
@@ -50,15 +49,33 @@ const uid = () => `b${Date.now().toString(36)}${Math.random().toString(36).slice
 const findBranch = (id) => state.map?.branches.find((b) => b.id === id);
 const allPeopleIds = () => state.map.branches.flatMap((b) => b.people.map((p) => p.id));
 
-async function post(url, body) {
+// JSON request to this server. A lapsed session sends the visitor to sign in and back here.
+async function request(method, url, body, { keepalive = false } = {}) {
   const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    method,
+    headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    keepalive,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (res.status === 401) {
+    location.assign(`/login?next=${encodeURIComponent(location.pathname)}`);
+    throw new Error('Your session ended. Sign in again.');
+  }
+  if (!res.ok) {
+    const err = new Error(data.error || `Request failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
   return data;
+}
+const post = (url, body) => request('POST', url, body);
+
+function icon(name) {
+  const i = document.createElement('i');
+  i.className = `ph-light ph-${name}`;
+  i.setAttribute('aria-hidden', 'true');
+  return i;
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +117,6 @@ els.input.addEventListener('input', () => {
   els.input.style.height = `${els.input.scrollHeight}px`;
 });
 
-els.reset.addEventListener('click', resetAll);
 els.fit.addEventListener('click', () => {
   autoFit = true;
   fitToView(true);
@@ -190,7 +206,7 @@ try { setChatCollapsed(localStorage.getItem(CHAT_KEY) === '1'); } catch {}
 let toastTimer = 0;
 function toast(message, { undoable = false } = {}) {
   clearTimeout(toastTimer);
-  els.toast.innerHTML = '';
+  els.toast.replaceChildren();
   els.toast.append(el('span', null, message));
   if (undoable) {
     els.toast.append(button('Undo', 'toast-action', () => {
@@ -213,9 +229,17 @@ async function submit(raw) {
   addMessage('user', text);
   state.messages.push({ role: 'user', content: text });
   setLoading(true);
+  const seq = viewSeq;
 
   try {
-    const data = await post('/api/plan', { messages: state.messages, map: state.map && mapForServer() });
+    await flushSave(); // the planner reads the saved map, so hand edits must land first
+    // The server plans the turn and saves the message, the reply and the new map version.
+    const data = await post('/api/network', { conversationId, message: text });
+    if (seq !== viewSeq) return; // the visitor moved to another chat meanwhile; this one is saved
+    if (!conversationId) {
+      conversationId = data.conversationId;
+      history.replaceState(null, '', `/app/c/${conversationId}`);
+    }
     state.messages.push({ role: 'assistant', content: data.reply });
     const searching = applyPlan(data);
     addMessage(
@@ -223,31 +247,17 @@ async function submit(raw) {
       data.reply,
       `${data.branches.length} branches${searching ? ` · finding people for ${searching}` : ''}`,
     );
-    save();
   } catch (err) {
+    if (seq !== viewSeq) return;
     // Drop the failed user turn so a retry doesn't send it twice.
     if (state.messages.at(-1)?.role === 'user') state.messages.pop();
     addMessage('error', err.message || 'Something went wrong.');
   } finally {
-    setLoading(false);
-    els.input.focus();
+    if (seq === viewSeq) {
+      setLoading(false);
+      els.input.focus();
+    }
   }
-}
-
-// The planner sees the map as edited by hand, so follow-ups build on it instead of replacing it.
-function mapForServer() {
-  const { goal, profile, branches } = state.map;
-  return {
-    goal,
-    profile,
-    branches: branches.map((b) => ({
-      id: b.id,
-      label: b.label,
-      why: b.why,
-      query: b.query,
-      people: b.people.map((p) => ({ name: p.name, headline: p.headline })),
-    })),
-  };
 }
 
 // Merge the planner's branch list into the map. Returns how many branches need people.
@@ -259,7 +269,7 @@ function applyPlan(data) {
   const branches = data.branches.map((p) => {
     const old = p.id ? prev.get(p.id) : null;
     if (old && !p.refresh) return { ...old, label: p.label, why: p.why, query: p.query };
-    const b = { id: old?.id ?? uid(), label: p.label, why: p.why, query: p.query, people: [], status: 'done', error: null, token: null };
+    const b = { id: old?.id ?? (p.id || uid()), label: p.label, why: p.why, query: p.query, people: [], status: 'done', error: null, token: null };
     toLoad.push(b.id);
     return b;
   });
@@ -299,7 +309,10 @@ function setLoading(on) {
   if (on) {
     thinkingEl = document.createElement('div');
     thinkingEl.className = 'thinking';
-    thinkingEl.innerHTML = '<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>';
+    const dots = el('span', 'dots');
+    dots.setAttribute('aria-hidden', 'true');
+    dots.append(el('i'), el('i'), el('i'));
+    thinkingEl.append(dots);
     thinkingEl.append(el('span', 'label', state.map ? 'Updating your branches' : 'Mapping your network'));
     els.messages.appendChild(thinkingEl);
     els.messages.scrollTop = els.messages.scrollHeight;
@@ -309,7 +322,10 @@ function setLoading(on) {
   }
 }
 
-function resetAll() {
+// Empty the chat and map on screen (before starting a new map or opening a saved chat).
+function clearView() {
+  viewSeq += 1;
+  setLoading(false);
   state.messages = [];
   state.map = null;
   undoStack.length = 0;
@@ -320,10 +336,8 @@ function resetAll() {
   els.empty.hidden = false;
   els.mapTitle.textContent = 'No map yet';
   particleLayer.selectAll('*').remove();
-  els.messages.innerHTML = '';
+  els.messages.replaceChildren();
   historyExpanded = false;
-  try { localStorage.removeItem(STORE_KEY); } catch {}
-  addMessage('assistant', 'Fresh start. Who do you want to meet?');
 }
 
 // ---------------------------------------------------------------------------
@@ -334,6 +348,9 @@ async function loadPeople(branchId, mode) {
   const b = findBranch(branchId);
   if (!b) return;
   const token = uid();
+  const seq = viewSeq;
+  const cid = conversationId;
+  const startMap = state.map;
   b.token = token;
   b.status = 'loading';
   b.error = null;
@@ -365,6 +382,16 @@ async function loadPeople(branchId, mode) {
     };
   }
   inflight.delete(token);
+
+  // Moved to another chat meanwhile: finish the search in the chat it belongs to.
+  if (seq !== viewSeq) {
+    const br = startMap.branches.find((x) => x.id === branchId && x.token === token);
+    if (br) {
+      apply(br);
+      putMap(cid, startMap);
+    }
+    return;
+  }
 
   // Apply to the live map and any undo snapshot taken mid-search, so undo never strands a spinner.
   for (const map of [state.map, ...undoStack]) {
@@ -488,22 +515,104 @@ function movePerson(fromId, personId, toId) {
 }
 
 // ---------------------------------------------------------------------------
-// Saving (this browser only)
+// Saving: every chat and map lives in the signed-in user's account on the server.
+// Chat turns are saved by /api/network; hand edits and finished people searches
+// are written to the map's latest version here, a moment after they happen.
 // ---------------------------------------------------------------------------
 
+const SAVE_DELAY = 800; // edits come in bursts; write at most this often
+let conversationId = null; // the open chat, or null for a new map that hasn't had a reply yet
+let connMeta = {};         // person id -> { id, status, notes, follow_up_on } for the open chat's tracked people
+let viewSeq = 0;           // bumps whenever the chat on screen changes, so stale replies are dropped
+let saveTimer = 0;
+let saving = Promise.resolve(); // map writes run one after another, in order
+
 function save() {
-  try {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ messages: state.messages, map: state.map }));
-  } catch {}
+  if (!conversationId || !state.map) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { saveTimer = 0; putMap(conversationId, state.map); }, SAVE_DELAY);
 }
 
-function restore() {
-  let saved = null;
-  try {
-    saved = JSON.parse(localStorage.getItem(STORE_KEY));
-  } catch {}
-  if (!Array.isArray(saved?.map?.branches)) return;
+// Write any pending edit now (before a chat turn, switching chats, or saving a connection).
+function flushSave() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = 0;
+    putMap(conversationId, state.map);
+  }
+  return saving;
+}
 
+function putMap(id, map, { keepalive = false } = {}) {
+  if (!id || !map) return saving;
+  const body = { map: structuredClone(map) };
+  saving = saving
+    .then(() => request('PUT', `/api/conversations/${id}/map`, body, { keepalive }))
+    .catch((err) => toast(`Couldn't save your map: ${err.message}`));
+  return saving;
+}
+
+// Leaving the page with an edit still waiting: send it anyway.
+window.addEventListener('pagehide', () => {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = 0;
+  putMap(conversationId, state.map, { keepalive: true });
+});
+
+// Start a fresh map (sidebar "New map", or /app).
+async function startNewMap() {
+  await flushSave();
+  clearView();
+  conversationId = null;
+  connMeta = {};
+  showIntro();
+}
+
+// Open a saved chat by id. Resolves false if it doesn't exist (or isn't yours).
+async function openConversation(id) {
+  if (id === conversationId && (state.map || state.messages.length)) return true;
+  await flushSave();
+  clearView();
+  conversationId = id;
+  connMeta = {};
+  const seq = viewSeq;
+  const loading = el('div', 'thinking');
+  loading.append(el('span', 'label', 'Opening your chat'));
+  els.messages.append(loading);
+  try {
+    const data = await request('GET', `/api/conversations/${encodeURIComponent(id)}`);
+    if (seq !== viewSeq) return true;
+    loading.remove();
+    connMeta = data.connections ?? {};
+    if (Array.isArray(data.map?.branches)) {
+      showSaved({ messages: data.messages, map: data.map });
+    } else {
+      state.messages = data.messages ?? [];
+      state.messages.forEach((m) => addMessage(m.role === 'user' ? 'user' : 'assistant', m.content));
+    }
+    return true;
+  } catch (err) {
+    if (seq !== viewSeq) return true;
+    loading.remove();
+    conversationId = null;
+    if (err.status === 404) return false;
+    addMessage('error', err.message || "Couldn't open this chat.");
+    return true;
+  }
+}
+
+// The welcome text and example prompts, as on first load.
+const introTemplate = document.querySelector('.intro')?.cloneNode(true);
+function showIntro() {
+  if (!introTemplate) return;
+  const intro = introTemplate.cloneNode(true);
+  intro.querySelectorAll('.chip').forEach((chip) => chip.addEventListener('click', () => submit(chip.textContent.trim())));
+  els.messages.append(intro);
+}
+
+
+function showSaved(saved) {
   state.messages = Array.isArray(saved.messages) ? saved.messages : [];
   state.map = saved.map;
   for (const b of state.map.branches) {
@@ -514,7 +623,6 @@ function restore() {
   }
   document.querySelector('.intro')?.remove();
   state.messages.forEach((m) => addMessage(m.role === 'user' ? 'user' : 'assistant', m.content));
-  toast('Restored your saved map');
   autoFit = true;
   render({ grow: true });
 }
@@ -1030,7 +1138,6 @@ mapEl.addEventListener('scroll', () => {
 function updateToolbar() {
   const has = Boolean(state.map);
   els.fit.disabled = !has;
-  els.reset.disabled = !has;
   els.addBranch.disabled = !has;
   els.merge.disabled = !has || state.map.branches.length < 2;
   els.undo.disabled = !undoStack.length;
@@ -1087,7 +1194,7 @@ function textarea(value, placeholder, rows = 3) {
 
 function openView(view) {
   state.view = view;
-  els.detailBody.innerHTML = '';
+  els.detailBody.replaceChildren();
   markActive();
   return els.detailBody;
 }
@@ -1128,12 +1235,12 @@ function stepPerson(dir) {
   openPerson(b.id, next.id);
 }
 
-function iconButton(icon, label, onClick, cls = '') {
+function iconButton(name, label, onClick, cls = '') {
   const b = el('button', `icon-btn ${cls}`.trim());
   b.type = 'button';
   b.setAttribute('aria-label', label);
   b.title = label;
-  b.innerHTML = `<i class="ph-light ph-${icon}" aria-hidden="true"></i>`;
+  b.append(icon(name));
   b.addEventListener('click', onClick);
   return b;
 }
@@ -1144,7 +1251,7 @@ function menu(label, items) {
   const summary = el('summary', 'icon-btn');
   summary.setAttribute('aria-label', label);
   summary.title = label;
-  summary.innerHTML = '<i class="ph-light ph-dots-three" aria-hidden="true"></i>';
+  summary.append(icon('dots-three'));
   const list = el('div', 'menu-list');
   list.setAttribute('role', 'menu');
   for (const item of items) {
@@ -1231,6 +1338,7 @@ function openPerson(branchId, personId) {
 
   body.append(nav, head, actions);
   if (p.why) body.append(el('p', 'why lead', p.why));
+  if (conversationId) body.append(personTracker(p)); // status, follow-up and notes (connections.js)
 
   // Tabs: prep (what you'll say) first, profile (the facts behind it) second.
   const tabs = el('div', 'tabs');
@@ -1283,7 +1391,6 @@ function openPerson(branchId, personId) {
   } else {
     panels.prep.append(el('p', 'why', 'No talking points for this person yet.'));
   }
-  panels.prep.append(el('p', 'soon-note label', 'Coffee-chat practice · Soon'));
 
   // Profile: the facts the talking points are built from.
   if (p.summary) panels.profile.append(el('p', 'why', p.summary));
@@ -1402,7 +1509,7 @@ function refreshBranchPeople(id) {
   const box = els.detailBody.querySelector('.branch-people');
   const b = findBranch(id);
   if (!box || !b) return;
-  box.innerHTML = '';
+  box.replaceChildren();
 
   box.append(el('h3', null, `${b.people.length} ${b.people.length === 1 ? 'person' : 'people'}`));
   const ul = el('ul', 'people-list');
@@ -1672,10 +1779,10 @@ function syncToggle(name) {
   p.toggle.setAttribute('aria-pressed', String(wide));
   p.toggle.setAttribute('aria-label', `${verb} ${p.noun}`);
   p.toggle.title = `${verb} ${p.noun}`;
-  const icon = phone.matches
+  const glyph = phone.matches
     ? (wide ? 'arrows-in-line-vertical' : 'arrows-out-line-vertical')
     : wide ? 'arrows-in-line-horizontal' : 'arrows-out-line-horizontal';
-  p.toggle.innerHTML = `<i class="ph-light ph-${icon}" aria-hidden="true"></i>`;
+  p.toggle.replaceChildren(icon(glyph));
 }
 
 // The map reacts: refit while auto-fitting, otherwise keep the selection in view.
@@ -1773,4 +1880,3 @@ phone.addEventListener?.('change', () => {
   syncToggle('detail');
 });
 
-restore();

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Create your account · NetPrep</title>
+  <meta name="theme-color" content="#070806" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500&family=Instrument+Serif:ital@1&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/light/style.css" />
+  <link rel="stylesheet" href="/tokens.css" />
+  <link rel="stylesheet" href="/auth.css" />
+</head>
+<body class="auth-page">
+  <canvas id="auth-field" class="auth-field" aria-hidden="true"></canvas>
+
+  <header class="auth-top">
+    <a class="logo" href="/"><span class="logo-mark" aria-hidden="true"></span>NetPrep</a>
+  </header>
+
+  <main class="auth-main">
+    <section class="auth-card glass" aria-labelledby="auth-title">
+      <div class="auth-root" aria-hidden="true"><span></span><span></span><i></i></div>
+      <p class="label auth-tag">Create account</p>
+      <h1 id="auth-title" class="auth-title">Start your <span class="accent">map</span>.</h1>
+      <p class="auth-sub">Every chat and every map is saved to your account.</p>
+
+      <form id="auth-form" class="auth-form" data-mode="signup" novalidate>
+        <div id="form-error" class="form-error" role="alert" hidden></div>
+
+        <div class="auth-field-row">
+          <label for="name">Name</label>
+          <input id="name" name="name" type="text" autocomplete="name" required aria-describedby="name-error" />
+          <p id="name-error" class="field-error" hidden></p>
+        </div>
+
+        <div class="auth-field-row">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" inputmode="email" required aria-describedby="email-error" />
+          <p id="email-error" class="field-error" hidden></p>
+        </div>
+
+        <div class="auth-field-row">
+          <label for="password">Password</label>
+          <div class="password-wrap">
+            <input id="password" name="password" type="password" autocomplete="new-password" minlength="10" required aria-describedby="password-hint password-error" />
+            <button type="button" class="reveal-btn" aria-controls="password" aria-pressed="false" aria-label="Show password"><i class="ph-light ph-eye" aria-hidden="true"></i></button>
+          </div>
+          <p id="password-hint" class="field-hint">10+ characters</p>
+          <p id="password-error" class="field-error" hidden></p>
+        </div>
+
+        <button id="submit" type="submit" class="pill pill-primary auth-submit">
+          <span class="submit-text">Create account</span>
+          <span class="submit-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <i class="ph-light ph-arrow-right arrow" aria-hidden="true"></i>
+        </button>
+      </form>
+
+      <p class="auth-switch">Already have an account? <a id="switch-link" href="/login">Sign in</a></p>
+    </section>
+  </main>
+
+  <script src="/field.js"></script>
+  <script src="/auth.js"></script>
+</body>
+</html>

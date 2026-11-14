@@ -4,21 +4,35 @@ Chat with an LLM about who you are and what you want, and watch a branching map 
 
 ## Run it
 
-You need [Node.js](https://nodejs.org) 18 or newer.
+You need [Node.js](https://nodejs.org) 18 or newer and a free [Supabase](https://supabase.com) project. Supabase holds accounts, saved chats and maps.
 
-1. Open `.env` and set:
-   - `OPENAI_API_KEY`: plans the branches and writes details and talking points.
+1. **Set up Supabase (once).**
+   1. Open **SQL Editor**, paste in all of [supabase/schema.sql](supabase/schema.sql), and click **Run**. This creates the tables and the row level security rules that keep each user's data private.
+   2. Go to **Authentication → Sign In / Providers → Email** and turn **off** "Confirm email". Accounts are email + password, with no verification email.
+2. **Fill in `.env`.**
+   - `SUPABASE_URL` and `SUPABASE_ANON_KEY`: in Supabase under **Project Settings → API**. Use the publishable (anon) key, never the secret or service_role key.
+   - `OPENAI_API_KEY`: plans the branches and writes the details and talking points.
    - `EXA_API_KEY`: finds real people. Create a free key at [dashboard.exa.ai/api-keys](https://dashboard.exa.ai/api-keys). The free tier gives $10 of credits every month, no card needed.
-2. In this folder, run:
+3. **Install and start.** In this folder, run:
 
    ```bash
    npm install
    npm start
    ```
 
-3. Open http://localhost:3000 for the landing page, or http://localhost:3000/app for the app.
+4. **Open it.** Go to http://localhost:3000 and click **Get started** to create an account. The app lives at http://localhost:3000/app.
 
-No keys yet? It still runs with demo data (you'll see a "demo data" badge), so you can try the interface first. With only the OpenAI key, branches are planned but people search is off (you'll see a "people search off" badge).
+No OpenAI key yet? It still runs with demo data (you'll see a "demo data" badge), so you can try the interface first. With only the OpenAI key, branches are planned but people search is off (you'll see a "people search off" badge).
+
+To run the API tests, use `npm test`. They need the Supabase setup above. See [ARCHITECTURE.md](ARCHITECTURE.md) for how the app fits together.
+
+## Your account
+
+- Every chat and its map are saved to your account as you go. The address becomes `/app/c/…` after the first reply, so a reload or a restart brings you back to it.
+- **Past chats** lists your chats by day, with a title search. You can open a chat to keep refining it, or rename or delete it.
+- **Save connection** in a person's panel marks them as someone you want to reach out to.
+- **Account** shows your name and email, and has sign out and delete account (this needs your password and typing DELETE).
+- **Connections**, **Practice** and **Insights** are placeholders for upcoming features.
 
 ## Shaping the map
 
@@ -34,7 +48,7 @@ The chat gets you a first map; after that you can edit it directly.
 - **Panel sizes:** drag the edge of the chat or the person panel to resize it (double-click the edge to reset), or use the widen button in its corner. The edge is keyboard-focusable too: ←/→ resize (Shift for bigger steps), Home/End jump to min/max, Enter toggles wide. Widths are remembered in your browser. Prep and Profile stay on separate tabs at any width. On phones the same button makes the sheet taller.
 - **Reading a person:** opening someone dims the other branches. Step through a branch with ‹ › or ←/→; **Prep** has the talking points (hover to copy), **Profile** has the facts behind them; move/remove live under ⋯.
 - Chat follow-ups ("add a branch for design-to-PM switchers", "drop the recruiters") build on your edited map instead of replacing it.
-- The map is saved in your browser, so a reload picks up where you left off.
+- The map is saved to your account as you edit, so a reload picks up where you left off.
 
 ## How it works
 
@@ -42,17 +56,22 @@ The chat gets you a first map; after that you can edit it directly.
 public/tokens.css   design tokens + shared buttons, glass, type ("Moss & Signal", see design inspiration/design.md)
 public/field.js     dot-matrix wave background, shared by the landing page and the map
 public/landing.*    landing page, served at /
-public/app.html     app layout (chat + map), served at /app
+public/login.html, signup.html, auth.*   sign-in and sign-up pages
+public/app.html     app shell (sidebar + views), served at /app/*
+public/shell.js     app routes, Past chats, Account   (shell.css: their styles)
 public/styles.css   app styling
 public/app.js       chat, map editing, and the D3 branching map
 public/assets/      landing page images (map-example.jpg is a screenshot of the app with illustrative people)
 server.js           Express server; keeps your API keys off the browser
 people.js           Exa people search + talking points grounded in each profile
 mock.js             demo data used when no OpenAI key is set
+lib/auth.js          sign up / sign in / sessions (Supabase Auth, HttpOnly cookies)
+lib/store.js         saved chats, map versions and connections
+supabase/schema.sql  database tables + row level security (run once in Supabase)
 .env                your API keys, model, and port (never commit this)
 ```
 
-1. `POST /api/plan`: the model turns the conversation (and the current, possibly hand-edited map) into branches. Each branch has a plain-English people search. The model never names people itself.
+1. `POST /api/network`: the model turns the conversation (and the saved, possibly hand-edited map) into branches, and the turn is saved to your account. Each branch has a plain-English people search. The model never names people itself.
 2. `POST /api/people`: for each branch, [Exa](https://exa.ai) people search returns real public profiles (name, role, work history, education, profile URL, profile text). The model then reads those profiles and writes the summary, why reach out, what's in common, and talking points, using only facts on the profile. Company pages and poor fits are dropped.
 
 Branches fill in one at a time as their searches finish. A map of four branches costs roughly 4 Exa searches (about $0.01 each) plus one OpenAI call per branch.
