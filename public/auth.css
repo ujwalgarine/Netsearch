@@ -1,0 +1,200 @@
+/* Sign in / sign up: a centered glass card on the moss glow and dot-matrix field (design.md 5, 6.5, 6.9). */
+
+.auth-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  background:
+    radial-gradient(55% 50% at 0% 30%, rgba(74, 90, 34, .38), transparent 70%),
+    radial-gradient(45% 40% at 100% 100%, rgba(74, 90, 34, .24), transparent 70%),
+    var(--bg-0);
+  overflow-x: hidden;
+}
+
+.auth-field {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: .55;
+  /* Fade the field out behind the card so the form stays the brightest thing on the page. */
+  -webkit-mask-image: radial-gradient(40% 45% at 50% 50%, transparent 30%, #000 85%);
+  mask-image: radial-gradient(40% 45% at 50% 50%, transparent 30%, #000 85%);
+}
+
+.auth-top {
+  position: relative;
+  z-index: 1;
+  padding: 24px 28px;
+}
+
+.auth-main {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  padding: 16px 16px 64px;
+}
+
+.auth-card {
+  position: relative;
+  width: min(100%, 420px);
+  padding: 44px 36px 32px;
+  border-radius: var(--r-lg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), var(--shadow-panel);
+  animation: card-in var(--t-slow) var(--ease-out) both;
+}
+
+/* The product's root node sits on the card's top edge: the map starts here. */
+.auth-root {
+  position: absolute;
+  top: 0;
+  left: 36px;
+  width: 44px;
+  height: 44px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+}
+.auth-root span {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line-signal);
+  opacity: .35;
+  animation: breathe 4s var(--ease-in-out) infinite;
+}
+.auth-root span + span { inset: 10px; opacity: .6; animation-delay: -2s; }
+.auth-root i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: var(--glow-node);
+}
+.auth-root::after {
+  /* a dotted signal line running from the node along the card's top edge */
+  content: '';
+  position: absolute;
+  left: 50px;
+  top: 50%;
+  width: calc(420px - 36px * 2 - 50px);
+  max-width: 60vw;
+  height: 2px;
+  background: radial-gradient(circle, var(--signal-dim) 0 1px, transparent 1.5px) 0 50% / 7px 2px repeat-x;
+  opacity: .6;
+  -webkit-mask-image: linear-gradient(90deg, #000, transparent);
+  mask-image: linear-gradient(90deg, #000, transparent);
+}
+
+.auth-tag { margin: 6px 0 18px; color: var(--signal-dim); }
+
+.auth-title {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 1.04;
+}
+
+.auth-sub {
+  margin: 12px 0 28px;
+  font-size: 15px;
+  color: var(--text-2);
+}
+
+.auth-form { display: grid; gap: 18px; }
+
+.auth-field-row label {
+  display: block;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.auth-field-row input {
+  width: 100%;
+  height: 48px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 16px;
+  color: var(--text-1);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  outline: none;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.auth-field-row input:focus { border-color: var(--line-signal); box-shadow: 0 0 0 4px rgba(200, 241, 105, .08); }
+.auth-field-row input[aria-invalid='true'] { border-color: rgba(232, 115, 90, .6); }
+.auth-field-row input[aria-invalid='true']:focus { box-shadow: 0 0 0 4px rgba(232, 115, 90, .1); }
+
+.password-wrap { position: relative; }
+.password-wrap input { padding-right: 52px; }
+.reveal-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-3);
+  font-size: 18px;
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.reveal-btn:hover { color: var(--text-1); background: var(--bg-3); }
+.reveal-btn[aria-pressed='true'] { color: var(--signal); }
+
+.field-hint { margin: 8px 0 0; font-size: 13px; color: var(--text-3); }
+.field-error { margin: 8px 0 0; font-size: 13px; color: var(--down); }
+
+.form-error {
+  padding: 12px 14px;
+  border-left: 1px solid rgba(232, 115, 90, .5);
+  background: rgba(232, 115, 90, .06);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-1);
+}
+.form-error a { color: var(--signal); }
+
+.auth-submit { width: 100%; margin-top: 6px; position: relative; }
+.submit-dots { display: none; gap: 5px; }
+.submit-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--on-signal); animation: blink 1.1s infinite; }
+.submit-dots i:nth-child(2) { animation-delay: .15s; }
+.submit-dots i:nth-child(3) { animation-delay: .3s; }
+.auth-submit.loading { pointer-events: none; }
+.auth-submit.loading .submit-dots { display: inline-flex; }
+.auth-submit.loading .arrow { display: none; }
+
+.auth-switch {
+  margin: 24px 0 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--text-2);
+}
+.auth-switch a { color: var(--text-1); text-decoration-color: var(--line-signal); text-underline-offset: 3px; }
+.auth-switch a:hover { color: var(--signal); }
+
+@keyframes card-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+@keyframes blink { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+
+@media (max-width: 480px) {
+  .auth-top { padding: 18px 20px; }
+  .auth-card { padding: 40px 22px 26px; }
+  .auth-root { left: 22px; }
+  .auth-title { font-size: 34px; }
+}

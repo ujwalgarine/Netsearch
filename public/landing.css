@@ -50,6 +50,8 @@ body { overflow-x: hidden; }
 }
 .nav.scrolled { background: var(--glass-strong); }
 .nav-links { display: flex; gap: 36px; }
+.nav-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.nav-actions[hidden] { display: none; }
 .nav-links a {
   position: relative;
   font-size: 14px;
@@ -456,11 +458,16 @@ body { overflow-x: hidden; }
   .proof-grid { grid-template-columns: 1fr; gap: 48px; }
 }
 
+@media (max-width: 380px) {
+  .nav-actions .pill-ghost { display: none; }
+}
+
 @media (max-width: 760px) {
   .wrap { padding: 0 16px; }
   .section { padding-top: 96px; }
   .nav { top: 12px; width: calc(100% - 24px); padding-left: 16px; }
   .nav-links { display: none; }
+  .nav-actions .pill.sm { padding: 0 14px; }
   .hero { padding: 104px 16px 80px; }
   .hero-sub { font-size: 17px; }
   .checks { flex-direction: column; align-items: center; gap: 10px; }
