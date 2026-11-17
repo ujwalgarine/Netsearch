@@ -11,6 +11,7 @@ import { exaPeopleSearch, enrichPeople, UpstreamError } from './people.js';
 import { createAuth, sameOriginOnly } from './lib/auth.js';
 import * as store from './lib/store.js';
 import * as insights from './lib/insights.js';
+import { practiceRoutes, practicePage, mediapipeDir } from './lib/practice.js';
 import rateLimit from 'express-rate-limit';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -69,16 +70,21 @@ const page = (file) => (_req, res) => res.sendFile(path.join(publicDir, file));
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 // Pages are only served through their guarded routes, never as raw .html files.
-app.get(['/landing.html', '/app.html', '/login.html', '/signup.html'], (req, res) =>
-  res.redirect(req.path === '/landing.html' ? '/' : req.path.replace(/\.html$/, '')),
+const PAGE_ROUTES = { '/landing.html': '/', '/practice-room.html': '/app/practice' };
+app.get(['/landing.html', '/app.html', '/login.html', '/signup.html', '/practice-room.html'], (req, res) =>
+  res.redirect(PAGE_ROUTES[req.path] ?? req.path.replace(/\.html$/, '')),
 );
 app.use(['/api', '/app', '/login', '/signup'], auth.attach);
 
 app.get('/', page('landing.html'));
 app.get('/login', auth.redirectIfSignedIn, page('login.html'));
 app.get('/signup', auth.redirectIfSignedIn, page('signup.html'));
+// The practice room (camera and microphone) is its own page with a stricter security policy.
+// /app/practice itself is the list inside the app.
+app.get('/app/practice/:session', auth.requirePageUser, practicePage);
 app.get(['/app', '/app/*'], auth.requirePageUser, page('app.html'));
 app.use(express.static(publicDir, { index: false }));
+app.use('/vendor/mediapipe', express.static(mediapipeDir, { index: false })); // on-device camera analysis
 
 app.use('/api/auth', auth.router);
 app.use('/api', auth.requireApiUser); // everything below needs a signed-in user
@@ -244,6 +250,12 @@ app.post('/api/insights/tips', llmLimiter, wrap(async (req, res) => {
     return sendError(res, err);
   }
 }));
+
+// ---------------------------------------------------------------------------
+// Practice coffee chats: setup, saved sessions, replies, the report, and voice (lib/practice.js)
+// ---------------------------------------------------------------------------
+
+app.use('/api/practice', practiceRoutes({ openai, model: MODEL, sendError }));
 
 // ---------------------------------------------------------------------------
 // One chat turn: plan the map, then save the user message, the reply and the new map version.

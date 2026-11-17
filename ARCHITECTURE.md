@@ -15,12 +15,14 @@ server.js              Express app: security headers, page routes, all /api rout
 lib/auth.js            Supabase auth: session cookies, refresh, page/API guards, signup/login/logout/me, rate limits, Origin check
 lib/store.js           Data access: conversations, messages, map versions, connections (list, filters, status/notes/follow-up), all filtered by user_id
 lib/insights.js        Insights summary (KPIs, funnel, mix, 12-week activity, follow-ups) and networking tips (summary → hash → tips_cache)
+lib/practice.js        Practice coffee chat: the fictional partner (prompt, demo script), report scoring, voice (speech, transcription), /api/practice routes, the practice room's headers
 people.js              Exa people search + the model writing each person's summary and talking points
 mock.js                Demo plan/people when there's no OpenAI key
 supabase/schema.sql    Tables, indexes, row level security, delete_my_account(). Run it in the Supabase SQL editor.
 tests/helpers.js       Test server on a random port, cookie-keeping client, direct-to-database client
 tests/api.test.js      Auth, conversations, maps
 tests/insights.test.js Connections, insights summary, tips cache
+tests/practice.test.js Practice: partner, report, voices, routes (bare app + in-memory store), and the same flow against Supabase
 
 public/tokens.css      "Moss & Signal" design tokens + shared primitives (see design inspiration/design.md)
 public/field.js        Dot-matrix wave canvas used on every page
@@ -35,6 +37,11 @@ public/insights.js     Insights page: KPI tiles, D3 charts (with tooltips and ta
 public/insights.css    Styles for Connections and Insights
 public/styles.css      Chat + map + detail panel styles
 public/app.js          Chat, D3 map, editing, saving the open chat (startNewMap / openConversation / save)
+public/practice.js     Practice page: start a practice chat with a tracked connection (or a sample partner), past reports, delete
+public/practice-room.* The practice room, its own page (ES modules): setup, conversation, voice, report
+public/practice-voice.js   Mic errors, recogniser fallback, recording for server transcription, device-voice ranking, playback
+public/practice-vision.js  On-device camera analysis (MediaPipe), loaded only when the camera is switched on
+public/vendor/models/  The two MediaPipe model files (MediaPipe's own JS/wasm is served from node_modules at /vendor/mediapipe)
 ```
 
 ## Pages
@@ -43,9 +50,10 @@ public/app.js          Chat, D3 map, editing, saving the open chat (startNewMap 
 |---|---|---|
 | `/` | landing (CTAs → /signup) | landing (CTAs → /app, nav shows "Open app") |
 | `/login`, `/signup` | the form | redirect to `next` (or `/app`) |
+| `/app/practice/<new or session id>` | redirect to `/login?next=<path>` | `practice-room.html`, with its own headers (see Auth flow) |
 | `/app`, `/app/*` | redirect to `/login?next=<path>` | `app.html`; `shell.js` picks the view |
 
-App views (client routes in `shell.js`): `/app` (new map), `/app/c/:id` (a saved chat), `/app/chats`, `/app/connections`, `/app/connections/:id` (with its detail sheet open), `/app/practice` and `/app/practice/new?connection=<id>` (still a placeholder: the next step builds it), `/app/insights`, `/app/account`.
+App views (client routes in `shell.js`): `/app` (new map), `/app/c/:id` (a saved chat), `/app/chats`, `/app/connections`, `/app/connections/:id` (with its detail sheet open), `/app/practice` (the Practice page), `/app/insights`, `/app/account`. `/app/practice/new?connection=<id>` and `/app/practice/<session id>` are the practice room, a separate page: when the app navigates there, `shell.js` loads it as a full page.
 
 `next` values are only followed if they are same-site relative paths (`safeNext` in `lib/auth.js`).
 
@@ -74,6 +82,17 @@ Every write (POST, PUT, PATCH or DELETE) must carry an `Origin` header matching 
 | GET `/api/insights/summary` | query: `today=YYYY-MM-DD` (the browser's date, for follow-ups) | `{today, kpis, funnel, mix, activity: {weeks}, followups}` (see Insights below) |
 | POST `/api/insights/tips` | | `{tips, source: 'llm' \| 'demo' \| 'starter', cached, generated_at?}`. Rate limited to 20 per 10 minutes per user. |
 | POST `/api/people` | `{goal, profile, branch, exclude, count}` | `{people}`. Exa search + write-ups (not saved; the browser saves the map afterwards). |
+| GET `/api/practice/setup` | query: `connection` (a connection id; empty = sample partner) | `{connection, persona, basedOn, talkingPoints, mock, audio, voices, sample}`. Saves nothing. 404 if the connection isn't yours. |
+| GET `/api/practice/sessions` | | `{sessions: [{id, status, score, grade, created_at, ended_at, partner, role, connection}]}`, newest first |
+| POST `/api/practice/sessions` | `{connectionId?}` | 201 `{id, connection, persona, basedOn, talkingPoints}`. Fixes the scenario in `scenario_json` and logs `practice_started`. |
+| GET `/api/practice/sessions/:id` | | The summary + setup fields, `report` (null until it ends) and `messages` (the transcript) |
+| DELETE `/api/practice/sessions/:id` | | `{ok}`; its messages go by cascade |
+| POST `/api/practice/sessions/:id/reply` | `{messages: [{role: user\|persona, text}]}` | `{reply, interest, mood, end, sig}`. 409 once the session has ended. Nothing is saved per turn. |
+| POST `/api/practice/sessions/:id/report` | `{turns, camera, durationSec}` | The report. Saves `status: completed`, `score`, `feedback_json`, `ended_at` and the transcript, and logs `practice_completed`, once; asking again returns the saved report. |
+| POST `/api/practice/speech` | `{text, sig, voice, mood}` or `{sample: true}` | `audio/mpeg`. Only replies this server signed (HMAC `sig`) or the fixed sample. 503 without an OpenAI key. |
+| POST `/api/practice/transcribe` | raw `audio/*` body, 3 MB max | `{text}`. For browsers without a working recogniser. 503 without an OpenAI key. |
+
+All `/api/practice/*` routes are rate limited to 60 requests a minute per user and sent with `Cache-Control: no-store`.
 
 ### How one chat turn flows
 
@@ -124,7 +143,8 @@ All ids are `uuid` or `bigint identity`, and timestamps are `timestamptz` (ISO s
 | `events` | id, user_id, type, ref_id, created_at: an append-only analytics log |
 
 - **Connection status** is one of `suggested | saved | contacted | replied | meeting_set | met`. Saving a map upserts one connection per person on it and refreshes their details but never the status or notes. People taken off the map are deleted only while they're still `suggested`.
-- **Events logged so far:** `signup`, `map_created` (the first map version of a conversation) and `connection_status_changed` (only when the status actually changes). `practice_started` and `practice_completed` are for the practice feature.
+- **Events logged so far:** `signup`, `map_created` (the first map version of a conversation), `connection_status_changed` (only when the status actually changes), `practice_started` (a practice chat began) and `practice_completed` (its report was saved). `ref_id` is the conversation, connection or practice session id.
+- **Practice sessions:** `scenario_json` is `{connection: {id, name, title, organization, branch}, profile, persona}`, fixed when the chat starts so every reply and the report use the same partner; `profile` is the cleaned profile (the real name is kept only to scrub it and to say "this is not them"). `feedback_json` is the whole report. `practice_messages.role` is `user` or `assistant`, saved when the chat ends.
 - **Row level security:** every table allows select, insert, update and delete only where `user_id = auth.uid()`. Inserts and updates on child tables also require the parent to be yours. `events` has no update policy.
 - **`delete_my_account()`:** a `security definer` function that deletes `auth.users` where `id = auth.uid()`. It can be executed by `authenticated` only.
 
@@ -138,7 +158,7 @@ All ids are `uuid` or `bigint identity`, and timestamps are `timestamptz` (ISO s
 - **Each request:** `auth.attach` verifies the access token with Supabase (cached for 30 s). If the token has expired, it uses the refresh token and rewrites the cookies. Once the 30 days are up, the session ends. `req.auth = { user, token, db }`, where `db` is a Supabase client acting as the user, so RLS applies on top of the explicit `user_id` filters.
 - **Log out:** revokes the session at Supabase (`/auth/v1/logout?scope=local`) and clears the cookies.
 - **Delete account:** checks the password with a fresh sign-in, then calls `delete_my_account()`, which cascades to all of the user's rows.
-- **Security headers:** `helmet`. The CSP allows scripts only from self and cdnjs, and styles from self, Google Fonts and unpkg (the Phosphor icons). `'unsafe-inline'` is allowed for styles only, because the landing page uses `style="--i: 0"` attributes. Images may come from any `https:` host (profile photos).
+- **Security headers:** the practice room (`/app/practice/<…>`) replaces helmet's CSP with a stricter one: `default-src 'none'`, scripts and wasm (`'wasm-unsafe-eval'`, for MediaPipe) from self only, `connect-src 'self'`, `media-src 'self' blob:`, plus `Permissions-Policy: camera=(self), microphone=(self)`. Everywhere else: `helmet`. The CSP allows scripts only from self and cdnjs, and styles from self, Google Fonts and unpkg (the Phosphor icons). `'unsafe-inline'` is allowed for styles only, because the landing page uses `style="--i: 0"` attributes. Images may come from any `https:` host (profile photos).
 
 ## Running and testing
 

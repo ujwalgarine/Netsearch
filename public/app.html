@@ -186,9 +186,18 @@
       <p class="label">Fig. 04 · Rehearse</p>
       <h1 id="practice-title" class="page-title">Practice</h1>
     </header>
-    <div class="page-empty">
+    <div class="practice-start">
+      <p class="why">Rehearse a coffee chat with a fictional double of someone you're tracking, typed or out loud, and get a graded report at the end.</p>
+      <form id="practice-form" class="page-tools practice-pick">
+        <label class="select-field"><span class="sr-only">Who to practice with</span><select id="practice-who"></select></label>
+        <button class="pill pill-primary sm" type="submit">Start practice <i class="ph-light ph-arrow-right arrow" aria-hidden="true"></i></button>
+      </form>
+      <p id="practice-hint" class="label practice-hint" hidden>Save someone from a map to practice with their double, or try the sample partner.</p>
+    </div>
+    <div id="practice-list" class="chats-list"></div>
+    <div id="practice-empty" class="page-empty" hidden>
       <div class="empty-rings" aria-hidden="true"><span></span><span></span><i></i></div>
-      <p>Coffee-chat practice will live here.</p>
+      <p>No practice chats yet.</p>
     </div>
   </section>
   <section class="page-view" id="view-insights" data-view="insights" aria-labelledby="insights-title" hidden>
@@ -293,6 +302,7 @@
   <script src="/app.js"></script>
   <script src="/connections.js"></script>
   <script src="/insights.js"></script>
+  <script src="/practice.js"></script>
   <script src="/shell.js"></script>
 </body>
 </html>

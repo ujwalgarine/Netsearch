@@ -3,6 +3,7 @@
 //
 // Routes: /app (new map) · /app/c/:id (a saved chat) · /app/chats · /app/connections
 //         /app/practice · /app/insights · /app/account
+// /app/practice/<new|session id> is the practice room, a page of its own (practice-room.html).
 
 const shell = {
   views: [...document.querySelectorAll('.views > [data-view]')],
@@ -33,6 +34,9 @@ function showView(name) {
 
 async function route({ fresh = false } = {}) {
   const r = parseRoute(location.pathname);
+  // The practice room has camera and microphone access and its own security policy, so it is loaded
+  // as a page of its own (the server serves it at this address) rather than shown inside the app.
+  if (r.view === 'practice' && r.sub) return location.replace(location.pathname + location.search);
   showView(r.view);
   if (r.view === 'map') {
     document.title = `${APP_NAME}`;
@@ -52,6 +56,7 @@ async function route({ fresh = false } = {}) {
   document.title = `${r.view[0].toUpperCase()}${r.view.slice(1)} · ${APP_NAME}`;
   if (r.view === 'chats') loadChats();
   if (r.view === 'connections') showConnectionsPage(r.sub);
+  if (r.view === 'practice') showPractice();
   if (r.view === 'insights') showInsights();
   if (r.view === 'account') renderAccount();
 }
