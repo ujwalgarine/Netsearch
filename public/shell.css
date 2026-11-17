@@ -111,6 +111,16 @@
 .page-empty { display: grid; justify-items: center; gap: 20px; padding: 72px 0; text-align: center; }
 .page-empty p { margin: 0; max-width: 32ch; font-family: var(--font-accent); font-style: italic; font-size: 24px; color: var(--text-3); }
 
+/* ---------------- Practice ---------------- */
+
+.practice-start { max-width: 860px; margin: 0 auto 8px; }
+.practice-start > .why { margin: 0 0 20px; max-width: 60ch; }
+.practice-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0; }
+.practice-pick .select-field { flex: 0 1 380px; }
+.practice-hint { margin: 12px 0 0; }
+.practice-row .chat-open { text-decoration: none; }
+.practice-based { color: var(--text-3); }
+
 /* ---------------- Past chats ---------------- */
 
 .search-field {

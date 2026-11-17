@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Practice coffee chat · NetPrep</title>
+  <meta name="theme-color" content="#070806" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500&family=Instrument+Serif:ital@1&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/tokens.css" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/practice-room.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <a class="logo" href="/app"><span class="logo-mark" aria-hidden="true"></span><span>NetPrep</span></a>
+      <span class="topbar-goal label">Practice coffee chat</span>
+      <span id="mode-badge" class="badge label" hidden title="No OpenAI key is set, so replies are scripted">Demo persona</span>
+      <span id="timer" class="timer" hidden>00:00</span>
+      <div class="bar-actions">
+        <button id="end" class="mono-btn light" type="button" hidden disabled>End &amp; get feedback</button>
+        <a class="mono-btn" href="/app/practice">Back to Practice</a>
+      </div>
+    </header>
+
+    <!-- 1. Before the chat: who you are meeting, and the two optional permissions -->
+    <main id="setup" class="view setup">
+      <div class="setup-copy">
+        <p class="label">Practice mode · Simulation</p>
+        <h1 class="setup-title">Sit down with their <span class="accent">double</span>.</h1>
+        <div class="partner glass">
+          <div class="avatar" data-partner="initials" aria-hidden="true"></div>
+          <div class="partner-who">
+            <p class="partner-name" data-partner="name">Your practice partner</p>
+            <p class="partner-role" data-partner="role"></p>
+          </div>
+          <span class="badge label">Fictional</span>
+        </div>
+        <p id="notice" class="notice"></p>
+        <p class="label graded-title">What you get at the end</p>
+        <ul class="graded">
+          <li><strong>Voice</strong> Speaking pace, filler words and stutters, silences.</li>
+          <li><strong>Conversation</strong> Topics, their interest in you, your questions, flow, awkwardness, fun.</li>
+          <li><strong>Presence</strong> Expression, attention and stillness, hand gestures.</li>
+        </ul>
+      </div>
+
+      <div class="setup-perms">
+        <section class="perm glass" aria-labelledby="cam-title">
+          <div class="perm-head">
+            <h2 id="cam-title">Camera</h2>
+            <span id="cam-state" class="perm-state label">Off</span>
+          </div>
+          <p>Grades your expressions, attention and gestures. It is analysed on this device: video never leaves your browser and is never recorded. Only numbers, like how often you smiled, go into your report.</p>
+          <video id="preview" class="preview" muted playsinline hidden></video>
+          <button id="cam-btn" class="pill pill-ghost sm" type="button">Allow camera</button>
+        </section>
+        <section class="perm glass" aria-labelledby="mic-title">
+          <div class="perm-head">
+            <h2 id="mic-title">Microphone</h2>
+            <span id="mic-state" class="perm-state label">Off</span>
+          </div>
+          <p id="mic-about">Speak your side. Your browser turns speech into text; in Chrome and Edge that step runs on the browser maker's speech service. No audio is sent to or kept by this app.</p>
+          <div id="mic-check" class="mic-check" hidden>
+            <span id="mic-meter" class="meter" aria-hidden="true"><i id="mic-level"></i></span>
+            <p id="mic-heard" class="mic-heard" aria-live="polite"></p>
+          </div>
+          <p id="mic-help" class="perm-help" role="alert" hidden></p>
+          <button id="mic-btn" class="pill pill-ghost sm" type="button">Allow microphone</button>
+        </section>
+        <section class="perm glass" aria-labelledby="voice-title">
+          <div class="perm-head">
+            <h2 id="voice-title">Their voice</h2>
+            <span id="voice-state" class="perm-state label">Device voice</span>
+          </div>
+          <p id="voice-about">Their replies are read out with the most natural voice this device has.</p>
+          <div id="voice-controls" class="voice-controls">
+            <label class="field">
+              <span class="label">Voice</span>
+              <select id="voice-pick"></select>
+            </label>
+            <label class="field">
+              <span class="label">Speed <output id="rate-out" for="rate">1.00×</output></span>
+              <input id="rate" type="range" min="0.8" max="1.3" step="0.05" value="1" />
+            </label>
+            <button id="voice-try" class="pill pill-ghost sm" type="button">Hear a sample</button>
+          </div>
+          <p id="voice-help" class="perm-help" hidden></p>
+        </section>
+        <button id="start" class="pill pill-primary" type="button" disabled>Start the chat <span class="arrow" aria-hidden="true">→</span></button>
+        <p class="fine">Camera and microphone are optional. Without them you type, and Voice or Presence is left out of your grade.</p>
+      </div>
+    </main>
+
+    <!-- 2. The chat -->
+    <main id="talk" class="view talk" hidden>
+      <section class="convo" aria-label="Conversation">
+        <div id="messages" class="messages" aria-live="polite"></div>
+        <p id="status" class="status label" role="status"></p>
+        <form id="composer" class="composer">
+          <label class="sr-only" for="input">Your reply</label>
+          <textarea id="input" rows="1" maxlength="1200" autocomplete="off" placeholder="Say hello…"></textarea>
+          <button id="mic" class="mic" type="button" aria-pressed="false" aria-label="Microphone" title="Microphone" hidden>
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="7.5" y="2.5" width="5" height="9" rx="2.5" /><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5" /></svg>
+          </button>
+          <button id="send" type="submit" aria-label="Send">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h12M11 5l5 5-5 5" /></svg>
+          </button>
+        </form>
+      </section>
+
+      <aside class="side" aria-label="Session">
+        <div class="partner glass">
+          <div class="avatar" data-partner="initials" aria-hidden="true"></div>
+          <div class="partner-who">
+            <p class="partner-tag label">Fictional · played by AI</p>
+            <p class="partner-name" data-partner="name"></p>
+            <p class="partner-role" data-partner="role"></p>
+          </div>
+        </div>
+        <div class="selfview">
+          <video id="selfview" muted playsinline></video>
+          <p id="cam-note" class="selfview-note">Camera off. Presence will not be graded.</p>
+          <div class="signals">
+            <span id="sig-face" class="signal label" hidden>Face</span>
+            <span id="sig-hands" class="signal label" hidden>Hands</span>
+          </div>
+        </div>
+        <button id="voice-out" class="mono-btn" type="button" aria-pressed="true">Their voice · On</button>
+        <details id="side-voice" class="notes side-voice">
+          <summary class="label">Voice and speed</summary>
+        </details>
+        <details class="notes">
+          <summary class="label">Your talking points</summary>
+          <ol id="notes"></ol>
+        </details>
+        <p class="fine">You are talking to an AI-played fictional character, not a real person. When you end the chat, the transcript and your report are saved to your account under Practice, where you can delete them.</p>
+      </aside>
+    </main>
+
+    <!-- 3. The report -->
+    <main id="report" class="view report" hidden>
+      <div id="report-loading" class="thinking report-loading"><span class="dots"><i></i><i></i><i></i></span><span class="label">Writing your feedback</span></div>
+      <div id="report-body" class="report-body" hidden>
+        <section class="r-head">
+          <div id="gauge" class="gauge"></div>
+          <div class="r-intro">
+            <p id="r-meta" class="label"></p>
+            <h1 class="setup-title">How it <span class="accent">went</span>.</h1>
+            <p id="r-summary" class="r-summary"></p>
+            <p id="r-caveat" class="fine" hidden>This chat was very short, so treat the grade as a rough first read.</p>
+          </div>
+        </section>
+        <section>
+          <h2 class="label r-h">Three things to try next time</h2>
+          <ol id="r-tips" class="tips"></ol>
+        </section>
+        <div id="r-metrics"></div>
+        <section class="r-two">
+          <div>
+            <h2 class="label r-h">Their interest over the chat</h2>
+            <div id="r-spark" class="spark"></div>
+          </div>
+          <div>
+            <h2 class="label r-h">Key moments</h2>
+            <ol id="r-moments" class="moments"></ol>
+          </div>
+        </section>
+        <details id="r-transcript-box" class="notes r-transcript" hidden>
+          <summary class="label">Transcript</summary>
+          <ol id="r-transcript"></ol>
+        </details>
+        <section class="r-actions">
+          <a id="again" class="pill pill-primary" href="/app/practice/new">Practice again</a>
+          <a class="pill pill-ghost" href="/app/practice">All practice chats</a>
+        </section>
+        <section>
+          <p id="r-privacy" class="fine r-privacy">This report and the transcript are saved to your account under Practice, where you can delete them. No video left your device. Camera-based scores are rough estimates meant for practice, not a judgment of you.</p>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="/practice-room.js"></script>
+</body>
+</html>
