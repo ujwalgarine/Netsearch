@@ -2,7 +2,7 @@
 // (startNewMap, openConversation, request, toast, el, icon and button come from there).
 //
 // Routes: /app (new map) · /app/c/:id (a saved chat) · /app/chats · /app/connections
-//         /app/practice · /app/insights · /app/account
+//         /app/practice[/new|/:id] (practice.js) · /app/insights · /app/account
 
 const shell = {
   views: [...document.querySelectorAll('.views > [data-view]')],
@@ -52,6 +52,7 @@ async function route({ fresh = false } = {}) {
   document.title = `${r.view[0].toUpperCase()}${r.view.slice(1)} · ${APP_NAME}`;
   if (r.view === 'chats') loadChats();
   if (r.view === 'connections') showConnectionsPage(r.sub);
+  if (r.view === 'practice') showPractice(r.sub);
   if (r.view === 'insights') showInsights();
   if (r.view === 'account') renderAccount();
 }

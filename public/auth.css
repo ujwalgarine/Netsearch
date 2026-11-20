@@ -1,14 +1,13 @@
-/* Sign in / sign up: a centered glass card on the moss glow and dot-matrix field (design.md 5, 6.5, 6.9). */
+/* Sign in / sign up: a white card floating on the hero's sky gradient (design.md 5, 6.5, 6.9). */
 
 .auth-page {
   min-height: 100vh;
   min-height: 100dvh;
   display: grid;
   grid-template-rows: auto 1fr;
-  background:
-    radial-gradient(55% 50% at 0% 30%, rgba(74, 90, 34, .38), transparent 70%),
-    radial-gradient(45% 40% at 100% 100%, rgba(74, 90, 34, .24), transparent 70%),
-    var(--bg-0);
+  /* the hero's sky, so signing in feels like stepping through the landing page */
+  background: radial-gradient(ellipse 100% 100% at 50% 100%, var(--sky-0) 0%, var(--sky-1) 27.5%, var(--sky-2) 55%, var(--sky-3) 77.5%, var(--sky-4) 100%);
+  background-color: var(--sky-4);
   overflow-x: hidden;
 }
 
@@ -18,7 +17,7 @@
   width: 100%;
   height: 100%;
   pointer-events: none;
-  opacity: .55;
+  opacity: .7;
   /* Fade the field out behind the card so the form stays the brightest thing on the page. */
   -webkit-mask-image: radial-gradient(40% 45% at 50% 50%, transparent 30%, #000 85%);
   mask-image: radial-gradient(40% 45% at 50% 50%, transparent 30%, #000 85%);
@@ -43,7 +42,9 @@
   width: min(100%, 420px);
   padding: 44px 36px 32px;
   border-radius: var(--r-lg);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), var(--shadow-panel);
+  background: rgba(255, 255, 255, .94);
+  border-color: rgba(255, 255, 255, .8);
+  box-shadow: inset 0 1px 0 #fff, 0 40px 90px -30px rgba(14, 40, 80, .45);
   animation: card-in var(--t-slow) var(--ease-out) both;
 }
 
@@ -94,8 +95,8 @@
 .auth-title {
   margin: 0;
   font-size: 40px;
-  font-weight: 300;
-  letter-spacing: -0.03em;
+  font-weight: 400;
+  letter-spacing: -0.045em;
   line-height: 1.04;
 }
 
@@ -125,15 +126,15 @@
   font: inherit;
   font-size: 16px;
   color: var(--text-1);
-  background: var(--bg-2);
-  border: 1px solid var(--line);
+  background: var(--bg-1);
+  border: 1px solid var(--line-strong);
   border-radius: var(--r-sm);
   outline: none;
   transition: border-color var(--t-fast), box-shadow var(--t-fast);
 }
-.auth-field-row input:focus { border-color: var(--line-signal); box-shadow: 0 0 0 4px rgba(200, 241, 105, .08); }
-.auth-field-row input[aria-invalid='true'] { border-color: rgba(232, 115, 90, .6); }
-.auth-field-row input[aria-invalid='true']:focus { box-shadow: 0 0 0 4px rgba(232, 115, 90, .1); }
+.auth-field-row input:focus { border-color: var(--line-signal); box-shadow: 0 0 0 4px var(--signal-tint); }
+.auth-field-row input[aria-invalid='true'] { border-color: rgba(194, 65, 45, .6); }
+.auth-field-row input[aria-invalid='true']:focus { box-shadow: 0 0 0 4px rgba(194, 65, 45, .1); }
 
 .password-wrap { position: relative; }
 .password-wrap input { padding-right: 52px; }
@@ -160,8 +161,8 @@
 
 .form-error {
   padding: 12px 14px;
-  border-left: 1px solid rgba(232, 115, 90, .5);
-  background: rgba(232, 115, 90, .06);
+  border-left: 2px solid rgba(194, 65, 45, .55);
+  background: rgba(194, 65, 45, .06);
   border-radius: 0 var(--r-sm) var(--r-sm) 0;
   font-size: 14px;
   line-height: 1.5;
@@ -198,3 +199,8 @@
   .auth-root { left: 22px; }
   .auth-title { font-size: 34px; }
 }
+
+/* Logo sits on the sky. */
+.auth-top .logo { color: var(--on-sky); }
+.auth-top .logo-mark { border-color: rgba(255, 255, 255, .7); }
+.auth-top .logo-mark::after { background: #fff; box-shadow: 0 0 0 4px rgba(255, 255, 255, .18); }

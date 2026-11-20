@@ -1,107 +1,119 @@
-# design.md: "Moss & Signal"
+# design.md: "Sky & Signal"
 
-The visual system for the landing page and the app (chat + network map).
-Working name in examples: **NetPrep**. Swap in the final name everywhere.
+The visual system for the landing page, the sign-in pages and the app (chat + network map).
+Product name: **NetPrep**.
 
 ---
 
 ## 1. The idea in one line
 
-**A dark forest at night, with your network lit up like signal running through it.**
+**Clear sky, white paper, one confident blue: a calm place to plan who to meet.**
 
-Organic (moss, depth, soft light) meets instrument (hairlines, mono labels, dot-matrix data). The product turns a vague goal into a living map of people, so the design should feel calm, precise and alive, never loud.
+Blue and white is the palette people already trust with their money, their health and their calendar. NetPrep asks students to share goals and reach out to strangers, so the design should feel open, steady and precise, never loud or mysterious. Atmosphere comes from the sky (a soft radial blue gradient) and from living detail (moss that grows under the cursor, dotted connections). Everything else is clean white surfaces, navy ink and hairlines.
 
 ### Principles
-1. **Darkness is the canvas.** Near-black surfaces; light comes from glows and content, not from big colored panels.
-2. **One signal color.** Lime is the only saturated color. It marks the thing to click, the active node, the live connection. If everything glows, nothing does.
-3. **Hairlines, not boxes.** Structure is drawn with 1px low-opacity lines. Fills are rare.
-4. **Light type, big size.** Headlines are large and light-weight (300). Weight is never how we create hierarchy at display sizes; size and space are.
-5. **Labels are instruments.** Small uppercase mono labels (`FIG. 01`, `BRANCH`, `03 CONNECTIONS`) give the "research tool" feel.
-6. **Connections are dotted light.** Anything that links two things is a dotted, softly glowing line. This is the product's signature motif.
+1. **Sky for moments, paper for work.** The sky gradient is reserved for entry points: the landing hero, sign-in / sign-up and the closing banner. Working surfaces (the app, the landing sections) are white and near-white with navy text.
+2. **One signal color.** Signal blue (`--signal`) is the only saturated UI color. It marks the thing to click, the active node, the live connection. If everything is blue, nothing is.
+3. **Hairlines and soft lift, not boxes and glows.** Structure is drawn with 1px navy lines at 10–18% opacity. Cards lift with a soft navy shadow (`--shadow-card`), never a colored glow.
+4. **Big, light-feeling type.** Display headlines are Instrument Sans 400 with tight tracking (−0.04 to −0.06em). Size and space create hierarchy, not weight.
+5. **One italic serif accent per headline.** Instrument Serif italic, in signal blue on white, in white on the sky.
+6. **Labels are instruments.** Small uppercase mono labels (`FIG. 01`, `BRANCH`, `03 CONNECTIONS`) keep the "research tool" feel.
+7. **Connections are dotted.** Anything that links two things is a dotted line (`stroke-dasharray: 1 6`). This is the product's signature motif.
 
 ---
 
-## 2. What we take from each reference
+## 2. What changed from "Moss & Signal"
 
-| Reference | Keep | Leave behind |
+| Was | Now | Why |
 |---|---|---|
-| **Eidetic** (black + olive glow, outline cards, tick gauges) | Olive radial glows bleeding from corners; outline cards with a small dot-in-circle mark top-right; huge light headlines with a tiny side caption; radial tick-gauge for stats; staggered card heights; the `●──→` arrow CTA | Repeating the nav in every section |
-| **Prime Intellect** (forest photo, mono UI, data panels) | Mono for UI labels and buttons; `FIG. 1` section tags; hairline grid cells; dot-matrix wave field as a background; small rectangular white button with `›`; data panels with numbers right-aligned | Dense logo walls (we don't have logos yet) |
-| **Verdant** (glass cards, lime accent, pill nav) | Floating glass pill nav; lime gradient pill CTA with glow; one italic serif accent word in the headline; "New" announcement pill; glass feature cards with an icon tile; dotted glowing lines converging on a node (this is our network motif) | Stock "Trusted by" logos; full-bleed glass everywhere |
+| Near-black surfaces | White / `#F4F7FB` surfaces, sky gradient for entry points | Light, open surfaces read as trustworthy and legible |
+| Lime signal with glows | Signal blue `#1D64C8` with soft navy shadows | Blue carries trust; glows read as "gaming" on light |
+| Moss-olive radial glows | Sky-blue haze (`--haze`) | Same depth, on-palette |
+| Manrope 300 | Instrument Sans 400–600 | Matches the hero; Instrument Sans has no 300, tighter tracking does the job |
+| Grain overlay | Removed | Grain dirties white surfaces |
+| Moss imagery everywhere | The moss lives only on the hero's log, as the interaction reward | Nature as a moment, not a theme |
 
 ---
 
 ## 3. Design tokens
 
-Copy into `:root`. Every color, size and duration in the UI comes from here.
+`public/tokens.css` is the source of truth. Every color, size and duration in the UI comes from there.
 
 ```css
 :root {
-  /* ---- Surfaces (darkest → lightest) ---- */
-  --bg-0: #070806;          /* page */
-  --bg-1: #0e100c;          /* sections, chat column */
-  --bg-2: #151811;          /* cards, inputs */
-  --bg-3: #1d2117;          /* hover / raised */
+  /* Sky (hero gradient and atmosphere; white text sits on these) */
+  --sky-0: #C8E6FF;   /* gradient centre (bottom middle) */
+  --sky-1: #A3CAE6;
+  --sky-2: #7EADCD;
+  --sky-3: #5799CF;
+  --sky-4: #3085D2;   /* gradient edge (top corners) */
 
-  /* ---- Glass ---- */
-  --glass: rgba(22, 26, 18, 0.55);
-  --glass-strong: rgba(26, 31, 21, 0.78);
-  --glass-blur: 18px;
+  /* Surfaces */
+  --bg-0: #F4F7FB;    /* page */
+  --bg-1: #FFFFFF;    /* panels, cards, chat column */
+  --bg-2: #F8FAFD;    /* quiet fills */
+  --bg-3: #E9EFF7;    /* hover / pressed */
 
-  /* ---- Lines ---- */
-  --line: rgba(230, 240, 210, 0.10);       /* default hairline */
-  --line-strong: rgba(230, 240, 210, 0.22); /* card outline, hover */
-  --line-signal: rgba(200, 241, 105, 0.55);
+  /* Glass */
+  --glass: rgba(255,255,255,.68);        /* frost on light */
+  --glass-strong: rgba(255,255,255,.9);
+  --glass-sky: rgba(255,255,255,.06);    /* hero pills on the sky */
+  --glass-sky-strong: rgba(255,255,255,.15);
+  --glass-edge: rgba(255,255,255,.75);   /* 1px gradient border, bright ends */
+  --glass-edge-soft: rgba(255,255,255,.12);
 
-  /* ---- Text ---- */
-  --text-1: #eef0e6;        /* primary: 17:1 on bg-0 */
-  --text-2: #a9ad9d;        /* secondary: 8.7:1 */
-  --text-3: #7f8373;        /* labels, meta: ≥4.5:1 on bg-0/bg-1 */
+  /* Lines */
+  --line: rgba(14,40,80,.10);
+  --line-strong: rgba(14,40,80,.18);
+  --line-signal: rgba(29,100,200,.45);
 
-  /* ---- Moss (atmosphere, never text) ---- */
-  --moss-glow: #4a5a22;     /* radial glows */
-  --moss-deep: #222a13;
-  --moss-mid: #5f7a2c;      /* dotted lines at rest, chart fills */
+  /* Text */
+  --text-1: #0E1E33;  /* navy ink, 15.6:1 on bg-0 */
+  --text-2: #3F5068;  /* 7.6:1 */
+  --text-3: #5C6B80;  /* labels and meta, 5.0:1 */
+  --on-sky: #FFFFFF;
 
-  /* ---- Signal (the one accent) ---- */
-  --signal: #c8f169;        /* lime: CTAs, active node, live state */
-  --signal-soft: #e6f7b0;   /* gradient top, highlights */
-  --signal-dim: #8fae4f;    /* lime text on dark when full lime is too loud */
-  --on-signal: #0b0d07;     /* text on lime: 15:1 */
+  /* Atmosphere (never text) */
+  --haze: rgba(48,133,210,.14);
+  --haze-deep: rgba(48,133,210,.24);
+  --link-rest: #9DB9DA;  /* dotted links at rest */
 
-  /* ---- Data ---- */
-  --up: #a6e07a;
-  --down: #e8735a;
+  /* Signal */
+  --signal: #1D64C8;       /* 5.3:1 on bg-0; white on it is 5.7:1 */
+  --signal-soft: #4A8FE3;  /* gradient top */
+  --signal-dim: #2B5C99;   /* blue text when full signal is too loud */
+  --signal-tint: rgba(29,100,200,.08);  /* focus rings, active fills */
+  --on-signal: #FFFFFF;
 
-  /* ---- Type ---- */
-  --font-display: 'Manrope', system-ui, sans-serif;     /* 200–500 */
-  --font-accent: 'Instrument Serif', Georgia, serif;    /* italic only */
-  --font-mono: 'Geist Mono', ui-monospace, monospace;   /* labels, buttons, data */
+  /* Data */
+  --up: #1C7C54;
+  --down: #C2412D;
 
-  /* ---- Radius ---- */
-  --r-xs: 4px;   /* mono buttons, tags */
-  --r-sm: 8px;   /* inputs, small tiles */
-  --r-md: 14px;  /* outline cards */
-  --r-lg: 22px;  /* glass cards, panels */
-  --r-pill: 999px;
+  /* Type */
+  --font-display: 'Instrument Sans', system-ui, sans-serif;
+  --font-accent: 'Instrument Serif', Georgia, serif;   /* italic only */
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
 
-  /* ---- Glow ---- */
-  --glow-signal: 0 0 0 1px rgba(200,241,105,.35), 0 8px 32px -6px rgba(200,241,105,.45);
-  --glow-node: 0 0 18px rgba(200,241,105,.55);
-  --shadow-panel: 0 30px 80px -30px rgba(0,0,0,.8);
+  /* Radius */
+  --r-xs: 4px; --r-sm: 8px; --r-md: 14px; --r-lg: 22px; --r-pill: 999px;
 
-  /* ---- Motion ---- */
-  --ease-out: cubic-bezier(.2, .8, .2, 1);
-  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
-  --t-fast: 160ms;
-  --t-base: 320ms;
-  --t-slow: 700ms;
+  /* Elevation */
+  --glow-signal: inset 0 1px 0 rgba(255,255,255,.25), 0 8px 24px -8px rgba(29,100,200,.55);
+  --glow-node: 0 0 0 4px rgba(29,100,200,.14);
+  --shadow-card: 0 1px 2px rgba(14,40,80,.05), 0 12px 32px -16px rgba(14,40,80,.18);
+  --shadow-panel: 0 24px 64px -24px rgba(14,40,80,.28);
+
+  /* Motion */
+  --ease-out: cubic-bezier(.2,.8,.2,1);
+  --ease-soft: cubic-bezier(.22,1,.36,1);   /* hero hovers */
+  --ease-in-out: cubic-bezier(.65,0,.35,1);
+  --t-fast: 160ms; --t-base: 320ms; --t-slow: 700ms;
 }
 ```
 
-Google Fonts:
+Google Fonts (every page):
 ```html
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500&family=Instrument+Serif:ital@1&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@1&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 ```
 
 ---
@@ -110,215 +122,168 @@ Google Fonts:
 
 | Role | Font | Size (desktop / mobile) | Weight | Tracking | Line height |
 |---|---|---|---|---|---|
-| Display (hero) | Manrope | 88 / 48px | 300 | -0.035em | 0.98 |
-| H1 section | Manrope | 56 / 36px | 300 | -0.03em | 1.02 |
-| H2 | Manrope | 32 / 26px | 400 | -0.02em | 1.1 |
-| H3 / card title | Manrope | 18px | 500 | -0.01em | 1.3 |
-| Stat number | Manrope | 44 / 34px | 300 | -0.03em | 1 |
-| Body | Manrope | 16px | 400 | 0 | 1.6 |
-| Small body | Manrope | 14px | 400 | 0 | 1.55 |
-| Accent word | Instrument Serif *italic* | same size as surrounding headline, ×1.05 | 400 | -0.01em | inherit |
+| Hero display, serif line | Instrument Serif *italic* | 184 / 79.3 design px | 400 | −0.06em | 1, trimmed |
+| Hero display, sans line | Instrument Sans | 170 / 73.2 design px | 400 | −0.06em | 1, trimmed |
+| H1 section | Instrument Sans | 60 / 38px (clamp) | 400 | −0.045em | 1.02 |
+| Page title (app) | Instrument Sans | 56 / 36px | 400 | −0.04em | 1.02 |
+| H2 | Instrument Sans | 32 / 26px | 400 | −0.035em | 1.1 |
+| H3 / card title | Instrument Sans | 18px | 500 | −0.02em | 1.3 |
+| Body | Instrument Sans | 16px | 400 | 0 | 1.6 |
+| Hero body | Instrument Sans | 20 / 16 design px | 500 | −0.02em | 22 / 20 |
+| Accent word | Instrument Serif *italic* | ×1.08 of surrounding | 400 | −0.02em | inherit |
 | Label / tag | Geist Mono | 11px | 500 | 0.12em, UPPERCASE | 1 |
-| Button | Geist Mono | 12px | 500 | 0.06em, UPPERCASE | 1 |
-| Data / numbers in panels | Geist Mono | 13px | 400 | 0 | 1.4, `font-variant-numeric: tabular-nums` |
+| Button | Instrument Sans | 15px (14 small) | 500 | −0.01em | 1 |
+| Data / numbers | Geist Mono | 13px | 400 | 0 | 1.4, tabular |
 
 Rules
-- **One italic accent word per headline, max**, colored `--signal`: "Meet the right people. *Rehearse* the first hello."
-- Headline + **side caption** pattern (from Eidetic): a 13px `--text-2` caption sits to the right of the first line of a big headline, baseline-aligned. Use on section openers only.
-- Body text max width: 60ch. Captions under stats: 28ch, centered.
-- Never bold a display headline. Never use mono for paragraphs.
+- One italic accent word per headline: signal blue on light, white on the sky.
+- Section openers: a mono `FIG. 0N — NAME` tag in `--signal-dim` above the headline, with a 13px `--text-2` side caption beside its last line.
+- Body max width 60ch. Never bold a display headline. Never use mono for paragraphs.
 
 ---
 
 ## 5. Atmosphere & backgrounds
 
-Layer these, back to front. They're what make it feel like the references instead of "dark mode".
-
-1. **Base**: `--bg-0`.
-2. **Moss glows**: 1–2 large radial gradients per section, offset into a corner, never centered behind text.
-   ```css
-   background:
-     radial-gradient(60% 50% at 0% 40%, rgba(74,90,34,.38), transparent 70%),
-     radial-gradient(40% 35% at 85% 100%, rgba(74,90,34,.22), transparent 70%),
-     var(--bg-0);
-   ```
-3. **Dot-matrix field** (Prime Intellect): a grid of 1.5px dots in `--line` that swells into a wave. Use on the hero edge and behind the map. Build in `<canvas>` (animated, slow) or as a static SVG pattern.
-4. **Grain**: SVG noise overlay at 4–6% opacity, `mix-blend-mode: overlay`, fixed, `pointer-events: none`.
-5. **Imagery**: macro moss / forest-at-night with a particle mesh flowing over it. Rules:
-   - Dark, low-key, green-black. Highlights only where light hits wet moss.
-   - Always masked into the page with a gradient edge, never a hard rectangle (except the one full-width banner strip, which gets `--r-lg` corners).
-   - **Use images you own or generate.** Don't reuse the reference shots. Until there's real art, the dot-matrix canvas carries the visual load alone.
+1. **Sky gradient** (entry points only)
+   - Desktop: `radial-gradient(ellipse 100% 100% at 50% 100%, sky-0 0%, sky-1 27.5%, sky-2 55%, sky-3 77.5%, sky-4 100%)`.
+   - Mobile (< 1024px): `radial-gradient(ellipse 263% 100% at 50% 100%, sky-0 0%, sky-1 15.9%, sky-2 31.8%, sky-3 58.4%, sky-4 85%)`.
+2. **Haze**: on light sections, one large radial `--haze` per section, offset into a corner, never centred behind text.
+3. **Dot-matrix field** (`public/field.js`): navy dots at rest, sky-blue at the wave crest, signal-blue under a spotlight. Options `ink`, `crestInk`, `spotInk` recolour it; on the sky use white for both `ink` and `crestInk`.
+4. **Imagery**: the hero's log pair (bare + mossy) is the only photographic art. Any new art must be blue-sky, daylight, softly lit, on a transparent background, and owned or generated by us.
 
 ---
 
 ## 6. Components
 
-### 6.1 Nav (floating glass pill)
-- Fixed, 16px from top, centered, max-width 1080px, height 56px, `--r-pill`.
-- `background: var(--glass); backdrop-filter: blur(var(--glass-blur)) saturate(140%); border: 1px solid var(--line);`
-- Left: logo mark + wordmark (Manrope 500, 15px, tracking 0.04em, uppercase optional).
-- Center: links in Manrope 14px `--text-2`; active link `--text-1` with a 4px `--signal` dot below.
-- Right: ghost `Log in` pill + primary `Get started →` pill (small size).
-- On scroll >40px: `--glass-strong`.
+### 6.1 Nav
+- **Hero nav** (on the sky): logo left; a centred glass pill of section links; a glass "Sign in" button right (it becomes "Open app" when signed in). Glass = `--glass-sky` + `backdrop-filter: blur(12px)` + 1px gradient edge (`.edge`, brightest at both round ends). Links fade to 0.6 opacity on hover; the button fill goes to `--glass-sky-strong`. 200ms `--ease-soft`. Phones hide the link pill.
+- **Compact nav** (after the hero): a fixed white glass pill that slides in once the hero leaves the viewport: logo, links (active link gets a 4px signal dot), ghost "Sign in" + primary "Get started".
 
 ### 6.2 Buttons
 | Variant | Use | Spec |
 |---|---|---|
-| **Primary pill** | One per view: the main action | `linear-gradient(180deg, var(--signal-soft), var(--signal))`, text `--on-signal` Manrope 500 15px, height 48px, padding 0 24px, `--r-pill`, `box-shadow: var(--glow-signal)`. Hover: glow spreads 20%, translateY(-1px). Trailing `→` slides 3px on hover. |
-| **Ghost pill** | Secondary | transparent, `1px solid var(--line-strong)`, text `--text-1`. Hover: `--bg-3`. |
-| **Mono button** | Tool-ish actions (Prime Intellect) | Geist Mono 12px uppercase, height 32px, `--r-xs`. Light: bg `--text-1`, text `--bg-0`. Dark: bg `--bg-3`, text `--text-2`. Suffix `›`. |
-| **Dot-arrow** | Quiet "continue" link under headlines | 22px circle outline with a 6px filled dot inside, followed by a 48px hairline and a chevron. On hover the line extends to 72px. |
+| **Primary pill** | One per view | `linear-gradient(180deg, --signal-soft, --signal)`, white text, 48px tall, `--glow-signal`. Hover lifts 1px; trailing `→` slides 3px. |
+| **Ghost pill** | Secondary | white fill, `1px --line-strong`, navy text. Hover `--bg-3`. |
+| **Sky CTA** | On the sky gradient | white pill, navy text, soft navy shadow. Hover `scale(1.03)`, 200ms `--ease-soft`. |
+| **Mono button** | Tool actions | Geist Mono 12px uppercase, 32px, `--r-xs`, `--bg-3` fill. |
 
-### 6.3 Announcement pill
-`● New  NetPrep can now rehearse coffee chats  ›`, 32px tall, glass, 13px. The leading dot and "New" are `--signal`.
+### 6.3 Cards
+- **White card** (steps, transcript, KPI rows, chart cards): `--bg-1`, `1px --line`, `--shadow-card`. Hover lifts 2px and deepens to `--shadow-panel`.
+- **Outline card** (proof stairs): white card plus a ring mark top-right; index number in signal blue; stagger heights 100 / 80 / 62%.
+- **Icon tile**: 40px, `--signal-tint` fill, 1px signal border at 20%, signal-blue icon.
 
-### 6.4 Outline card (Eidetic)
-- `background: linear-gradient(180deg, rgba(255,255,255,.025), transparent); border: 1px solid var(--line-strong); border-radius: var(--r-md); padding: 24px;`
-- Top-right **ring mark**: 18px circle, 1px `--line-strong`, with a 6px `--text-1` dot. When active, the dot turns `--signal` and glows.
-- Content: big stat or index (`01`) top-left; body copy anchored to the **bottom** of the card.
-- In a row, stagger heights (e.g. 100% / 80% / 60%) aligned to the bottom edge for the descending-steps look.
+### 6.4 Inputs & chat
+- Fields: white, `1px --line-strong`, focus `--line-signal` + `0 0 0 4px --signal-tint`.
+- Composer: white, `--r-lg`, `--shadow-card`; send button is a 40px primary-gradient circle.
+- **User message**: right-aligned bubble, `#EAF2FD` fill with a 16% signal border. **Assistant**: no bubble, a 6px signal dot; older turns fade to `--text-2` with a grey dot.
 
-### 6.5 Glass feature card (Verdant)
-- `background: var(--glass); backdrop-filter: blur(14px); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 28px;`
-- Inner top highlight: `box-shadow: inset 0 1px 0 rgba(255,255,255,.06);`
-- Header: 40px icon tile (`--r-sm`, `1px solid var(--line-signal)`, lime icon stroke 1.5px) + title (H3).
-- Body: 14px `--text-2`.
-- Bottom half holds a **live mini-visual**: the dotted-lines-into-node diagram, a sparkline, or concentric rings.
-
-### 6.6 Stat gauge (Eidetic)
-- 60 radial ticks around a circle (tick 10px long, 1px, `--line-strong`).
-- The "filled" arc gets a 3px dot at each tick end in `--signal-soft`, with the last dot glowing.
-- Center: stat number in Manrope 300 with a small `%` at 0.5em.
-- Caption below, 13px `--text-2`, centered, 2 lines.
-- Animate: ticks fill clockwise over `--t-slow` when scrolled into view.
-
-### 6.7 Section tag (Prime Intellect)
-`FIG. 02 — THE MAP` in Geist Mono 11px `--text-3`, top-left of a hairline-bordered panel, 16px inset. Use to number landing sections.
-
-### 6.8 Data panel
-Hairline-bordered panel, rows separated by `--line`. Label left (mono, `--text-3`), value right (mono, `--text-1`, tabular). Positive values `--up`, negative `--down`. Used for the "connection detail" stats in the app (e.g., `SHARED TIES 2`, `REPLY LIKELIHOOD HIGH`).
-
-### 6.9 Inputs & chat composer
-- Field: `--bg-2`, `1px solid var(--line)`, `--r-lg` for the composer (`--r-sm` for normal inputs), 16px text, placeholder `--text-3`.
-- Focus: border `--line-signal` + `0 0 0 4px rgba(200,241,105,.08)`.
-- Send button: 40px lime circle with a `→` in `--on-signal`; disabled = `--bg-3` with `--text-3` arrow.
-
-### 6.10 Chat messages
-- **User**: right-aligned, `--bg-3` fill, `1px solid var(--line)`, `--r-lg` with a 6px bottom-right corner, `--text-1`.
-- **Assistant**: no bubble. Left-aligned text on the background, preceded by a 6px `--signal` dot. Meta line below in mono 11px `--signal-dim` (`4 BRANCHES · 9 CONNECTIONS`).
-- **Thinking**: a row of 3 dots pulsing in sequence, plus a mono label `MAPPING YOUR NETWORK`.
-- **Error**: `1px solid rgba(232,115,90,.4)` left border, text `--down`.
-
-### 6.11 Network map (the hero of the app)
-This is where the Verdant "dotted lines converge on a node" motif becomes the product.
-
+### 6.5 Network map
 | Element | Spec |
 |---|---|
-| Canvas | `--bg-0` with moss glow behind the root and the dot-matrix field at 50% opacity. Pan/zoom. |
-| **Root (goal)** | 14px lime dot with `--glow-node`, plus 2 concentric rings (r 26px and 44px, 1px `--line-signal` at 40% / 20%) that breathe slowly (scale 1→1.06, 4s). Goal text in Manrope 300 24px to its left. |
-| **Branch** | 64px-wide glass pill: mono label uppercase 11px `--text-1`, leading 6px lime dot. Count badge `03` in `--text-3`. |
-| **Connection card** | Outline card (6.4) at 240×56px: title Manrope 500 13px, org mono 11px `--text-3`, ring mark top-right. Hover: border `--line-strong` → `--line-signal`, ring dot turns lime. Selected: lime ring dot + `--glow-signal` at 50%. |
-| **Links** | Dotted curves (`stroke-dasharray: 1 6; stroke-linecap: round; stroke-width: 1.5`) in `--moss-mid`. Root→branch links are `--signal-dim`. On hover/selection the path to the root turns `--signal` and a small particle travels along it (`offset-path` or animated dashoffset). |
-| **Grow animation** | Root rings appear → links draw in level by level (dashoffset, `--t-slow`, `--ease-out`) → nodes fade up 6px, stagger 60ms. |
+| Canvas | `--bg-0` with sky haze behind the root and the dot field at 50%. |
+| Root | signal dot with two breathing `--line-signal` rings; goal text Instrument Sans 400 24px. |
+| Branch | white pill, `--line-strong` stroke, signal lamp, mono label. Active: signal stroke on `#EAF2FD`. |
+| Person card | white card, ring mark; hover stroke `--line-signal`; selected stroke `--signal`. |
+| Links | dotted `--link-rest`; root→branch `--signal-dim`; lit path `--signal` with a travelling particle. |
 
-### 6.12 Detail panel (connection)
-- Right-side sheet, 400px, `--glass-strong` + blur, left border `--line`, `--shadow-panel`. Slides in over `--t-base`.
-- Top: section tag (`ALUMNI AT TARGET COMPANIES`), title in Manrope 300 32px, org in mono.
-- "Why" paragraph in `--text-2`.
-- **Talking points**: numbered list; numbers `01 02 03` in mono `--signal-dim`, rows split by `--line`.
-- Data panel (6.8) for shared ties etc.
-- Actions: primary pill **Practice coffee chat**; ghost pill **Find on LinkedIn ↗**.
+### 6.6 Detail sheet, data panel, tabs
+Unchanged in layout. White glass sheet, `--shadow-panel`; data panel is white with hairline rows; the selected tab gets a 1px signal underline; the segmented outreach tracker is a `--bg-3` track with the active stage on a white chip.
 
-### 6.13 Icons
-1.5px stroke, rounded caps, 20px grid (Lucide-style). Default `--text-2`; in icon tiles and active states, `--signal`.
+### 6.7 Icons
+Phosphor Light (1.5px stroke). Default `--text-2`; in icon tiles and active states, `--signal`.
 
 ---
 
 ## 7. Landing page
 
-Max content width 1200px, 24px gutters (16px on mobile). Sections separated by 160px (96px mobile). Each section has one moss glow.
+Max content width 1200px, 24px gutters (16px on phones). Sections 160px apart (96px on phones).
 
-1. **Nav**: glass pill (6.1).
-2. **Hero** (100vh, centered)
-   - Announcement pill (6.3).
-   - Display headline, 2 lines: **"Meet the right people.** / ***Rehearse*** **the first hello."** (accent word lime italic serif).
-   - Subhead 18px `--text-2`, max 46ch: "Tell NetPrep your goal. It maps the people worth meeting, writes your talking points, and lets you practice the coffee chat before it's real."
-   - Primary pill `Map my network →` + ghost pill `See how it works`.
-   - Check row in 13px `--text-3`: `✓ Free while in beta  ✓ No LinkedIn login  ✓ Built for students`.
-   - Behind: a live, slowly rotating mini network map (root + 3 branches + dotted links) over the dot-matrix wave, masked into the bottom edge.
-3. **How it works**: 3 glass cards (6.5), `FIG. 01–03`:
-   - *Describe your goal* → mini visual: chat bubble typing.
-   - *Get your map* → dotted lines converging on a lime node.
-   - *Practice the chat* → concentric rings with a pulsing voice dot.
-4. **The map, up close**: full-width product screenshot of the app in a `--r-lg` frame with a hairline border and moss glow underneath. Side caption pattern: "Every branch is a reason to reach out."
-5. **Proof**: 2 stat gauges (6.6) + 3 staggered outline cards (6.4).
-   > ⚠️ Use only real numbers (beta results, survey data). Until then, use outcome statements instead of stats ("Talking points written for *you*, not a template"). Never ship invented metrics.
-6. **Coffee-chat preview**: split layout, left = headline "Practice with their *double*." + body; right = a glass chat transcript with the agent, with a mono `PRACTICE MODE` tag.
-7. **Closing CTA**: big headline, primary pill, the moss/particle banner strip (`--r-lg`) underneath.
-8. **Footer**: hairline top border, mono 11px links, `© 2026 NetPrep`.
+### 7.1 Order
+1. **Hero** (7.2), full screen on the sky.
+2. **How it works**: three white cards, `01–03`, each with a live mini visual (typing bubble, dotted lines converging on a node, breathing rings).
+3. **The map, up close**: the app screenshot (`public/assets/map-example.jpg`, captured from the real app in this theme) in a `--r-lg` frame with a sky-blue shadow underneath.
+4. **Proof**: outcome statements on staggered outline cards. Real numbers only, never invented metrics.
+5. **Practice preview**: headline left, a white transcript card right.
+6. **Closing banner**: a `--r-lg` strip of the sky gradient with drifting white dots, white headline and a sky CTA.
+7. **Footer**: hairline top border, mono links, `© 2026 NetPrep`.
 
-No logo wall until real partners or schools have agreed to be shown.
+### 7.2 Hero: "Every person has a story."
+Built from the easylog hero prompt, adapted to this codebase: vanilla JS (`public/landing-hero.js`) + GSAP 3.15 from cdnjs instead of React/Vite, NetPrep copy, and a white CTA instead of lime. A bare log floats on the sky; moss grows wherever the cursor moves and fades about a second after it leaves.
+
+**Scale.** Every size is in design px: `--u = min(100vw / 1440, 100svh / 760)` on desktop, `min(100vw / 415, 100svh / 760)` below 1024px. Borders and blur radii stay in CSS px. The canvas reads the unit from a hidden probe `calc(100 * var(--u))` wide.
+
+**Layout (desktop, 1440 × 900).**
+- Nav row at top/left/right 28, height 50; link pill padding 0 28, gap 31; button padding 0 24.
+- Headline at left 28, top 114.5, gap 8: "Every person" (serif) baseline at y 247; "has a story." (sans) cap top 255, baseline 377. Each character is an inline-block span for the reveal; the h1 carries the `aria-label`.
+- Lead: top 162, right 34, 319 wide, 3 lines.
+- Action block: right 28, bottom 89, 325 wide, gap 28: paragraph (3 lines), then the 207 × 61 white CTA "Map my network".
+- Bottom bar: left/right/bottom 28: a 33px white circle with a black ↓ + "Scroll down for more" / "Free while in beta".
+- Log image box: `max(1482u, 102.92vw)` wide at 2752:1536, centred, its centre 92.5u below the middle.
+- Text boxes use `text-box: trim-both cap alphabetic` with negative-margin fallbacks (serif `-0.12em 0 -0.16em`, sans `-0.14em 0`).
+
+**Layout (< 1024px).** Nav at top 47, side 20, link pill hidden, button 43 tall on `--glass-sky-strong`. Headline + lead stack at top 126.7, gap 28. Action block left/right 20, bottom 98, full-width CTA. Log drawn inside an 826 × 345 clip band (`max(826u, 110vw)`), centre 31.5u below the middle, image top at −22.9% of the band.
+
+**Motion.** t = 0 is when both log images are decoded and the three font faces have loaded.
+- **M1 preloader**: a counter (display sans, tabular, small `%`) follows real byte progress × 0.9 via `gsap.quickTo` (0.4s `power1.out`). At t = 0 it runs to 100 (0.8s), the log zooms 2.6× → 1× (0.9s `expo.out`) and un-pixelates from 64px blocks to 1px (`log2` 6 → 0 linear over 1s), and the counter fades at 0.85s.
+- **M2 reveals**: nav at 1.0 (blur 8 → 0, 0.5s); headline characters at 1.3 (opacity, blur 18, xPercent −30, 0.8s, stagger 0.035 per line); lead 2.1, bottom bar 2.5, paragraph 2.7, CTA 2.85 (blur 10 → 0, 0.6s). Every blur-in ends with `clearProps: "filter"` so the glass keeps blurring.
+- **M3 moss**: the cursor lays brush stamps `{x, y, strength, born}` every 0.12 × radius of travel (strength 0.5), and every 50ms while resting (0.25). Each frame the half-resolution mask is cleared and redrawn from the stamps at `strength × e^(−age / 1.1)`; stamps under 0.004 are dropped, so the log returns to fully bare with no ghost trail. Brush radius 240u. Touch screens (`hover: none`) show full moss, no mask.
+- **M4 cursor**: on mouse devices, a 40u white-glass disc replaces the cursor inside the hero only, easing 30% of the way per 60fps frame.
+- **Reduced motion**: no counter, zoom or pixelation; everything fades in together over 0.4s. The moss and cursor stay.
+
+**Assets** (use as-is; they send CORS headers): `log-bare.webp` and `log-moss.webp` from `assets.uberdesigner.ai/easylog/`, an exact pixel-aligned pair. They're preloaded with `<link rel="preload" as="fetch" crossorigin>` and allowed in the CSP's `connect-src`.
 
 ---
 
-## 8. App screen (chat + map)
+## 8. Sign in / sign up
+
+The sky gradient full-bleed with white drifting dots, the white logo top-left, and a centred white card (94% white, `--r-lg`, deep navy shadow). A signal root node sits on the card's top edge with a dotted line running along it: the map starts here.
+
+---
+
+## 9. App screen (chat + map)
 
 ```
-┌──────────────── glass top bar (56px): logo · goal title (mono) · Fit · New map · avatar ───────────────┐
-│ ┌── chat 400px ──┐ ┌──────────────── map canvas ──────────────────────────────┐ ┌── detail 400px ──┐ │
-│ │ bg-1, hairline │ │ dot field + moss glow behind root                        │ │ glass sheet,     │ │
-│ │ right border   │ │ root ◉ ── branches (glass pills) ── connection cards     │ │ slides over map  │ │
-│ │ messages       │ │                                                          │ │                  │ │
-│ │ composer       │ │                                  FIG. MAP · 4 · 9  (mono)│ │                  │ │
-│ └────────────────┘ └──────────────────────────────────────────────────────────┘ └──────────────────┘ │
-└──────────────────────────────────────────────────────────────────────────────────────────────────────┘
+┌ sidebar 240 (white) ┐┌──────── white glass top bar: goal (mono) · demo badge · undo · branch · merge ────────┐
+│ logo                ││ ┌ chat (white) ┐ ┌──────────── map (bg-0 + haze + dot field) ─────────┐ ┌ detail ┐ │
+│ New map  (active:   ││ │ messages     │ │ root ◉ ·· branches (white pills) ·· person cards   │ │ white  │ │
+│  signal-tint fill,  ││ │ composer     │ │                               FIG. MAP · 3 · 9     │ │ glass  │ │
+│  blue rail)         ││ └──────────────┘ └────────────────────────────────────────────────────┘ └────────┘ │
+└─────────────────────┘└────────────────────────────────────────────────────────────────────────────────────┘
 ```
-- Empty state: centered root rings breathing alone, with the Instrument Serif italic line *"Your network grows here."* in `--text-3`, and 3 example prompts as ghost pills in the chat.
-- Mobile (<760px): chat on top, map below at 70vh, detail panel becomes a bottom sheet (`--r-lg` top corners, drag handle).
+- Sidebar: white with a faint sky haze top-left; active item gets a `--signal-tint` fill and a 2px signal rail.
+- Page views (Past chats, Connections, Insights, Account): `--bg-0` with one haze top-right; tables on hairlines; KPI rows and chart cards are white cards.
+- Phones (< 760px): sidebar becomes a white glass bottom tab bar; detail becomes a bottom sheet.
 
 ---
 
-## 9. Motion
+## 10. Motion
 
-- **Page load (landing)**: nav fades down (0ms) → pill (120ms) → headline lines rise 12px + fade (200ms, 300ms) → subhead (420ms) → CTAs (520ms) → background map starts growing (600ms). Duration `--t-slow`, `--ease-out`.
-- **Scroll reveals**: cards rise 16px + fade, stagger 80ms, triggered at 15% visibility. Once only.
-- **Ambient**: dot-matrix wave drifts (≈20s loop); root rings breathe (4s); glows don't move.
-- **Hover**: `--t-fast`. Lift ≤2px. Never scale cards.
-- Respect `prefers-reduced-motion`: disable ambient loops and draw-in; show final states instantly.
-
----
-
-## 10. Accessibility
-
-- Body text is `--text-1` or `--text-2` only (≥7.8:1). `--text-3` is for labels and meta (≥4.5:1 on `--bg-0`/`--bg-1`); avoid it on `--bg-3`.
-- Lime is never the *only* signal: active nodes also get a ring/border change; up/down values carry `+`/`−`.
-- Glass panels must sit on a dark enough backdrop for text to pass; add `--glass-strong` if content behind is busy.
-- Focus ring everywhere: `outline: 2px solid var(--signal); outline-offset: 3px;`.
-- Map nodes are keyboard-focusable (Tab through branches → connections; Enter opens detail; Esc closes).
-- Hit targets ≥40px on touch.
+- **Landing load**: the hero intro (7.2). Below the hero, cards rise 16px + fade, staggered 80ms, once, at 15% visibility.
+- **Ambient**: dot fields drift (~20s loop); root rings breathe (4s).
+- **Hover**: `--t-fast`; lift ≤ 2px. Only the sky CTA scales (1.03).
+- **Reduced motion**: disable ambient loops and draw-ins; show final states.
 
 ---
 
-## 11. Do / Don't
+## 11. Accessibility
+
+- Body text on light surfaces is `--text-1` or `--text-2` only (≥ 7.6:1). `--text-3` is for labels and meta (5.0:1).
+- On the sky, white text is display-sized or 500-weight at ≥ 16 design px; the gradient's darkest stops sit behind it. Don't put small or light-weight text on `--sky-1`/`--sky-0`.
+- White text over the hero art always gets help, because the log runs behind the copy: a navy scrim over the canvas (`--scrim-top`, `--scrim-side`, `--scrim-bottom`), a soft navy `text-shadow` (`--text-lift`, `--display-lift`), and a feathered frosted patch (blur 14px + 30% navy) behind each paragraph. The headline sits above those patches so it never gets blurred.
+- Blue is never the only signal: active nodes also change their border, stages add pips, values carry `+`/`−`.
+- Focus ring everywhere: `outline: 2px solid var(--signal); outline-offset: 3px`.
+- Hit targets ≥ 40px on touch.
+
+---
+
+## 12. Do / Don't
 
 | Do | Don't |
 |---|---|
-| Let large areas stay dark and empty | Fill sections with solid green or gradients edge-to-edge |
-| Use lime for one primary action per view | Make headings, icons and borders all lime |
-| Draw structure with 1px hairlines | Use heavy borders or drop shadows on cards |
-| Keep headlines light (300) and big | Bold display text |
+| Keep the sky for entry points | Put the sky gradient behind working UI |
+| Use signal blue for one primary action per view | Make headings, icons and borders all blue |
+| Lift cards with soft navy shadows | Use colored glows or heavy borders |
+| Keep headlines big, 400, tightly tracked | Bold display text |
 | Use mono for labels, numbers and small buttons | Use mono for paragraphs |
-| Use dotted glowing lines for every connection | Use solid arrows or straight connector lines |
-| Mask imagery softly into the dark | Drop in hard-edged rectangular photos |
+| Draw every connection as a dotted line | Use solid arrows or straight connectors |
 | Use real data, or none | Fake stats, fake logos, fake testimonials |
-
----
-
-## 12. Applying it to the current prototype
-
-Prototype files: `public/index.html`, `public/styles.css`, `public/app.js`.
-1. Replace the Google Fonts link (section 3) and the `:root` block in `styles.css` with these tokens; remove the paper/vermilion palette.
-2. Restyle `.chat`, `.msg`, `.composer` per 6.9–6.10.
-3. In `app.js` `renderMap()`: switch links to dotted (`stroke-dasharray: 1 6`), add the root rings, render branches as glass pills and connections as outline cards with the ring mark (6.11).
-4. Restyle `.detail` per 6.12 and promote **Practice coffee chat** to the primary pill.
-5. Build the landing page as a new `public/landing.html` that shares `styles.css` tokens; serve the app at `/app`.

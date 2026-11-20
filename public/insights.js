@@ -15,7 +15,9 @@ const ix = {
   tipsNote: $('tips-note'),
   refresh: $('tips-refresh'),
   tip: $('chart-tip'),
+  trend: $('chart-trend'),
   summary: null,
+  practice: null, // practice sessions (GET /api/practice), for the score trend
   seq: 0,
 };
 
@@ -26,9 +28,13 @@ async function showInsights() {
   const seq = ++ix.seq;
   ix.root.classList.add('refreshing'); // keep the previous frame while refetching
   try {
-    const summary = await request('GET', `/api/insights/summary?today=${localToday()}`);
+    const [summary, practice] = await Promise.all([
+      request('GET', `/api/insights/summary?today=${localToday()}`),
+      request('GET', '/api/practice').catch(() => ({ sessions: [] })),
+    ]);
     if (seq !== ix.seq) return;
     ix.summary = summary;
+    ix.practice = practice.sessions;
     renderInsights();
   } catch (err) {
     if (seq === ix.seq) toast(`Couldn't load insights: ${err.message}`);
@@ -46,6 +52,7 @@ function renderInsights() {
   renderMix(s);
   renderActivity(s);
   renderFollowups(s);
+  renderTrend();
 }
 
 // Charts re-flow on width changes only (D3 draws to the measured width).
@@ -55,6 +62,7 @@ new ResizeObserver(() => {
   if (!ix.summary || Math.abs(w - lastWidth) < 4 || $('view-insights').hidden) return;
   lastWidth = w;
   renderActivity(ix.summary);
+  renderTrend();
 }).observe(ix.root);
 
 // ---- empty state, one line with the next step ----
@@ -342,6 +350,115 @@ function drawColumns(cell, weeks, series) {
     .attr('y', innerH + 15)
     .attr('text-anchor', (_w, i) => (i === 0 ? 'start' : 'end'))
     .text((w) => fmtDay(w.start));
+}
+
+// ---------------------------------------------------------------------------
+// Practice score trend: one point per completed practice chat, oldest to newest
+// ---------------------------------------------------------------------------
+
+function renderTrend() {
+  const done = (ix.practice ?? [])
+    .filter((s) => s.status === 'completed' && typeof s.score === 'number')
+    .sort((a, b) => new Date(a.ended_at || a.created_at) - new Date(b.ended_at || b.created_at));
+  if (done.length < 2) {
+    ix.trend.replaceChildren(
+      emptyState(
+        done.length ? 'Finish one more practice chat to see your trend.' : 'Complete two practice chats to see how your score moves.',
+        { label: 'Practice', href: '/app/practice/new', nav: 'practice' },
+      ),
+    );
+    return;
+  }
+  const when = (s) => s.ended_at || s.created_at;
+  withTable(
+    ix.trend,
+    (box) => drawTrend(box, done, when),
+    [
+      { label: 'Date', value: (s) => fmtDay(when(s)) },
+      { label: 'Connection', value: (s) => s.connection.name || '—' },
+      { label: 'Goal', value: (s) => s.goal },
+      { label: 'Score', num: true, value: (s) => `${s.score}/10` },
+    ],
+    done,
+  );
+}
+
+function drawTrend(box, data, when) {
+  const width = Math.max(260, box.clientWidth || 600);
+  const height = 210;
+  const m = { top: 18, right: 18, bottom: 26, left: 28 };
+  const innerW = width - m.left - m.right;
+  const innerH = height - m.top - m.bottom;
+  const x = d3.scalePoint().domain(data.map((_d, i) => i)).range([0, innerW]).padding(0.4);
+  const y = d3.scaleLinear().domain([0, 10]).range([innerH, 0]);
+  const first = data[0].score;
+  const last = data[data.length - 1].score;
+  const change = last - first;
+
+  const svg = d3
+    .select(box)
+    .append('svg')
+    .attr('class', 'trend')
+    .attr('viewBox', `0 0 ${width} ${height}`)
+    .attr('width', '100%')
+    .attr('height', height)
+    .attr('role', 'img')
+    .attr('aria-label', `Practice scores over ${data.length} chats, from ${first} to ${last} out of 10.`);
+  const g = svg.append('g').attr('transform', `translate(${m.left},${m.top})`);
+
+  for (const v of [0, 5, 10]) {
+    g.append('line').attr('class', v ? 'grid' : 'baseline').attr('x1', 0).attr('x2', innerW).attr('y1', y(v)).attr('y2', y(v));
+    g.append('text').attr('class', 'tick').attr('x', -8).attr('y', y(v)).attr('dy', '0.32em').attr('text-anchor', 'end').text(v);
+  }
+
+  const area = d3.area().x((_d, i) => x(i)).y0(innerH).y1((d) => y(d.score)).curve(d3.curveMonotoneX);
+  const line = d3.line().x((_d, i) => x(i)).y((d) => y(d.score)).curve(d3.curveMonotoneX);
+  g.append('path').attr('class', 'trend-area').attr('d', area(data));
+  g.append('path').attr('class', 'trend-line').attr('d', line(data));
+
+  g.selectAll('circle.pt')
+    .data(data)
+    .join('circle')
+    .attr('class', (_d, i) => `pt${i === data.length - 1 ? ' last' : ''}`)
+    .attr('cx', (_d, i) => x(i))
+    .attr('cy', (d) => y(d.score))
+    .attr('r', (_d, i) => (i === data.length - 1 ? 5.5 : 4));
+
+  // The latest score, labelled; the change since the first chat.
+  g.append('text')
+    .attr('class', 'trend-last')
+    .attr('x', x(data.length - 1))
+    .attr('y', y(last) - 14)
+    .attr('text-anchor', 'middle')
+    .text(`${last}/10`);
+  g.append('text')
+    .attr('class', 'tick')
+    .attr('x', innerW)
+    .attr('y', -6)
+    .attr('text-anchor', 'end')
+    .text(change === 0 ? 'no change since first' : `${change > 0 ? '+' : '−'}${Math.abs(change)} since first`);
+
+  // Hit targets: a tall band per chat.
+  const band = innerW / data.length;
+  g.selectAll('rect.hit')
+    .data(data)
+    .join('rect')
+    .attr('class', 'hit')
+    .attr('x', (_d, i) => x(i) - band / 2)
+    .attr('y', 0)
+    .attr('width', band)
+    .attr('height', innerH)
+    .attr('aria-label', (d) => `${fmtDay(when(d))}, ${d.connection.name || 'practice chat'}: ${d.score} out of 10`)
+    .call((h) => hoverable(h, (d) => `${d.score}/10`, (d) => `${d.connection.name || 'Practice chat'} · ${fmtDay(when(d))}`));
+
+  g.selectAll('text.xt')
+    .data([0, data.length - 1])
+    .join('text')
+    .attr('class', 'tick')
+    .attr('x', (i) => x(i))
+    .attr('y', innerH + 17)
+    .attr('text-anchor', (i) => (i === 0 ? 'start' : 'end'))
+    .text((i) => fmtDay(when(data[i])));
 }
 
 // ---------------------------------------------------------------------------

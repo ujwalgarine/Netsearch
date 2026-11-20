@@ -18,6 +18,9 @@
       manual: false,  // true: no loop or observers of its own; returns { draw }
       spot: null,     // optional () => { x, y, k, mask(x, y) } lighting dots near a point, or null
       spotRadius: 160,
+      ink: [14, 40, 80],      // dot color at rest (navy on light surfaces)
+      crestInk: [48, 133, 210], // dots near the crest pick up sky blue
+      spotInk: [29, 100, 200],  // spotlight color (signal blue)
       ...options,
     };
     const ctx = canvas.getContext('2d');
@@ -56,22 +59,23 @@
           const ripple = 0.65 + 0.35 * Math.sin(nx * 38 - t * 3 + ny * 9);
           const k = band * ripple;
           let r = o.base + o.swell * k;
-          // Near the crest, dots pick up a little moss-lime (signal-dim, not full signal).
+          // Near the crest, dots pick up sky blue (not full signal).
           const crest = k > 0.55;
-          let cr = crest ? 143 : 230;
-          let cg = crest ? 174 : 240;
-          let cb = crest ? 79 : 210;
-          let ca = crest ? 0.25 + 0.55 * k : o.rest + 0.3 * k;
+          const ink = crest ? o.crestInk : o.ink;
+          let cr = ink[0];
+          let cg = ink[1];
+          let cb = ink[2];
+          let ca = crest ? 0.2 + 0.45 * k : o.rest + 0.22 * k;
           if (spot) {
             const d2 = (x - spot.x) ** 2 + (y - spot.y) ** 2;
             if (d2 < R * R) {
-              // Spotlight: smoothstep falloff toward full signal lime and 2.2x size.
+              // Spotlight: smoothstep falloff toward full signal blue and 2.2x size.
               const u = 1 - Math.sqrt(d2) / R;
               const f = u * u * (3 - 2 * u) * spot.k * (spot.mask ? spot.mask(x, y) : 1);
-              cr += (200 - cr) * f;
-              cg += (241 - cg) * f;
-              cb += (105 - cb) * f;
-              ca += (0.95 - ca) * f;
+              cr += (o.spotInk[0] - cr) * f;
+              cg += (o.spotInk[1] - cg) * f;
+              cb += (o.spotInk[2] - cb) * f;
+              ca += (0.9 - ca) * f;
               r *= 1 + 1.2 * f;
             }
           }

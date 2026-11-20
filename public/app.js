@@ -634,11 +634,11 @@ function showSaved(saved) {
 const svg = d3.select('#graph');
 const defs = svg.append('defs');
 const glow = defs.append('radialGradient').attr('id', 'root-glow');
-glow.append('stop').attr('offset', '0%').attr('stop-color', '#4a5a22').attr('stop-opacity', 0.5);
-glow.append('stop').attr('offset', '100%').attr('stop-color', '#4a5a22').attr('stop-opacity', 0);
+glow.append('stop').attr('offset', '0%').attr('stop-color', '#3085D2').attr('stop-opacity', 0.2);
+glow.append('stop').attr('offset', '100%').attr('stop-color', '#3085D2').attr('stop-opacity', 0);
 
 const g = svg.append('g');
-const glowLayer = g.append('g').attr('class', 'root-glow'); // moss light behind the root, moves with the map
+const glowLayer = g.append('g').attr('class', 'root-glow'); // sky haze behind the root, moves with the map
 const linkLayer = g.append('g');
 const particleLayer = g.append('g');
 const nodeLayer = g.append('g');

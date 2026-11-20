@@ -11,6 +11,7 @@ import { exaPeopleSearch, enrichPeople, UpstreamError } from './people.js';
 import { createAuth, sameOriginOnly } from './lib/auth.js';
 import * as store from './lib/store.js';
 import * as insights from './lib/insights.js';
+import * as practice from './lib/practice.js';
 import rateLimit from 'express-rate-limit';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -47,7 +48,7 @@ app.use(
         'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://unpkg.com'],
         'font-src': ["'self'", 'https://fonts.gstatic.com', 'https://unpkg.com'],
         'img-src': ["'self'", 'data:', 'https:'], // profile photos come from many hosts
-        'connect-src': ["'self'"],
+        'connect-src': ["'self'", 'https://assets.uberdesigner.ai'], // the landing hero fetches its log images for byte progress
         'upgrade-insecure-requests': production ? [] : null,
       },
     },
@@ -233,7 +234,12 @@ const llmLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: (req) => req.auth.user.id,
-  handler: (_req, res) => res.status(429).json({ error: 'Too many tip refreshes. Try again in a few minutes.' }),
+  handler: (req, res) =>
+    res.status(429).json({
+      error: req.originalUrl.startsWith('/api/practice')
+        ? 'Too many practice requests. Try again in a few minutes.'
+        : 'Too many tip refreshes. Try again in a few minutes.',
+    }),
 });
 
 app.post('/api/insights/tips', llmLimiter, wrap(async (req, res) => {
@@ -243,6 +249,126 @@ app.post('/api/insights/tips', llmLimiter, wrap(async (req, res) => {
     if (err instanceof store.StoreError) throw err;
     return sendError(res, err);
   }
+}));
+
+// ---------------------------------------------------------------------------
+// Practice coffee chats (lib/practice.js). Every route is per user; the ones that call the model
+// share the per-user LLM limit above.
+// ---------------------------------------------------------------------------
+
+app.get('/api/practice', wrap(async (req, res) => {
+  res.json({ sessions: await practice.listSessions(req.auth.db, req.auth.user.id) });
+}));
+
+app.get('/api/practice/:id', wrap(async (req, res) => {
+  const { db, user } = req.auth;
+  const s = await practice.getSession(db, user.id, req.params.id);
+  if (!s) return notFound(res);
+  const messages = await practice.getMessages(db, user.id, s.id);
+  res.json({
+    ...practice.summarize(s),
+    goal_key: s.scenario_json?.goal ?? '',
+    talking_points: s.scenario_json?.talking_points ?? [],
+    turns_used: messages.filter((m) => m.role === 'user').length,
+    messages,
+    report: s.feedback_json ?? null,
+  });
+}));
+
+app.post('/api/practice', llmLimiter, wrap(async (req, res) => {
+  const { db, user } = req.auth;
+  const { setup, error } = practice.parseSetup(req.body);
+  if (error) return res.status(400).json({ error });
+  const conn = await practice.getConnection(db, user.id, setup.connection_id);
+  if (!conn) return notFound(res);
+  const context = await practice.mapContext(db, user.id, conn.conversation_id);
+  const scenario = practice.buildScenario(setup, conn, context, { mock: !openai });
+
+  let opening;
+  try {
+    opening = await practice.openingLine({ openai, model: MODEL, scenario });
+  } catch (err) {
+    return sendError(res, err);
+  }
+  const s = await practice.createSession(db, user.id, conn.id, scenario, opening);
+  res.status(201).json({ id: s.id, opening, persona: scenario.persona, max_turns: scenario.max_turns, demo: scenario.mock });
+}));
+
+// One user turn. The persona's reply streams back as Server-Sent Events:
+//   start {turn, max_turns} · delta {text} … · done {turn, max_turns, turns_left, limit_reached, demo} · error {error}
+// Both messages are saved once the reply is complete.
+app.post('/api/practice/:id/message', llmLimiter, wrap(async (req, res) => {
+  const { db, user } = req.auth;
+  const content = String(req.body?.content ?? '').trim();
+  if (!content) return res.status(400).json({ error: 'Write a message first.' });
+  if (content.length > practice.MAX_MESSAGE) return res.status(400).json({ error: `Keep messages under ${practice.MAX_MESSAGE.toLocaleString('en-US')} characters.` });
+  const s = await practice.getSession(db, user.id, req.params.id);
+  if (!s) return notFound(res);
+  if (s.status !== 'active') return res.status(409).json({ error: 'This practice chat has ended.' });
+  const history = await practice.getMessages(db, user.id, s.id);
+  const used = history.filter((m) => m.role === 'user').length;
+  const max = s.scenario_json.max_turns;
+  if (used >= max) return res.status(409).json({ error: 'Turn limit reached. End the chat to see your feedback.' });
+
+  res.status(200).set({ 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+  res.flushHeaders();
+  const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  send('start', { turn: used + 1, max_turns: max });
+
+  let reply = '';
+  try {
+    for await (const piece of practice.replyStream({ openai, model: MODEL, scenario: s.scenario_json, history, content })) {
+      reply += piece;
+      send('delta', { text: piece });
+    }
+    reply = reply.trim();
+    if (!reply) throw new Error('empty reply');
+    await practice.addMessages(db, user.id, s.id, [{ role: 'user', content }, { role: 'assistant', content: reply }]);
+  } catch (err) {
+    send('error', { error: err instanceof store.StoreError ? `${err.message} Try again.` : errorHint(err).error });
+    return res.end();
+  }
+  send('done', { turn: used + 1, max_turns: max, turns_left: max - used - 1, limit_reached: used + 1 >= max, demo: Boolean(s.scenario_json.mock) });
+  res.end();
+}));
+
+// A private coaching hint: one suggested next question. Never added to the transcript.
+app.post('/api/practice/:id/hint', llmLimiter, wrap(async (req, res) => {
+  const { db, user } = req.auth;
+  const s = await practice.getSession(db, user.id, req.params.id);
+  if (!s) return notFound(res);
+  if (s.status !== 'active') return res.status(409).json({ error: 'This practice chat has ended.' });
+  const history = await practice.getMessages(db, user.id, s.id);
+  try {
+    res.json({ hint: await practice.coachHint({ openai, model: MODEL, scenario: s.scenario_json, history }), demo: Boolean(s.scenario_json.mock) });
+  } catch (err) {
+    return sendError(res, err);
+  }
+}));
+
+// Ends the chat and returns the feedback report. Idempotent: later calls return the stored report.
+// With no user messages there's nothing to score: the session is closed as "abandoned".
+app.post('/api/practice/:id/end', llmLimiter, wrap(async (req, res) => {
+  const { db, user } = req.auth;
+  let s = await practice.getSession(db, user.id, req.params.id);
+  if (!s) return notFound(res);
+  const reply = (row) => res.json({ id: row.id, status: row.status, score: row.score, report: row.feedback_json ?? null, demo: Boolean(row.scenario_json?.mock) });
+  if (s.status !== 'active') return reply(s);
+
+  const history = await practice.getMessages(db, user.id, s.id);
+  if (!history.some((m) => m.role === 'user')) {
+    return reply((await practice.finishSession(db, user.id, s.id, { status: 'abandoned' })) ?? (await practice.getSession(db, user.id, s.id)));
+  }
+  let report;
+  try {
+    report = await practice.generateReport({ openai, model: MODEL, scenario: s.scenario_json, history });
+  } catch (err) {
+    return sendError(res, err);
+  }
+  const done = await practice.finishSession(db, user.id, s.id, { status: 'completed', score: report.overall_score, report });
+  // Lost a race with another /end: serve the report that was stored first.
+  s = done ?? (await practice.getSession(db, user.id, s.id));
+  reply(s);
 }));
 
 // ---------------------------------------------------------------------------
@@ -391,12 +517,18 @@ app.post('/api/people', async (req, res) => {
 });
 
 function sendError(res, err) {
+  const { status, error } = errorHint(err);
+  return res.status(status).json({ error });
+}
+
+// An upstream (OpenAI / Exa) failure as { status, error } with a message the user can act on.
+function errorHint(err) {
   if (err instanceof UpstreamError) {
-    return res.status(err.status >= 400 && err.status < 600 ? err.status : 502).json({ error: err.message });
+    return { status: err.status >= 400 && err.status < 600 ? err.status : 502, error: err.message };
   }
   console.error('[openai]', err?.status ?? '', err?.message ?? err);
   const status = err?.status && err.status >= 400 && err.status < 600 ? err.status : 500;
-  const hint =
+  const error =
     status === 401
       ? 'OpenAI rejected the API key. Check OPENAI_API_KEY in your .env file.'
       : status === 404
@@ -404,7 +536,7 @@ function sendError(res, err) {
         : status === 429
           ? 'Rate limited or out of credits on your OpenAI account.'
           : 'Something went wrong talking to OpenAI. Check the server terminal for details.';
-  return res.status(status).json({ error: hint });
+  return { status, error };
 }
 
 

@@ -1,46 +1,61 @@
-/* "Moss & Signal": shared tokens and primitives for the landing page and the app.
+/* "Sky & Signal": shared tokens and primitives for the landing page and the app.
    Source of truth: design inspiration/design.md, section 3. */
 
 :root {
-  /* Surfaces (darkest to lightest) */
-  --bg-0: #070806;
-  --bg-1: #0e100c;
-  --bg-2: #151811;
-  --bg-3: #1d2117;
+  /* Sky (the hero gradient and atmosphere; white text sits on these) */
+  --sky-0: #C8E6FF;
+  --sky-1: #A3CAE6;
+  --sky-2: #7EADCD;
+  --sky-3: #5799CF;
+  --sky-4: #3085D2;
 
-  /* Glass */
-  --glass: rgba(22, 26, 18, 0.55);
-  --glass-strong: rgba(26, 31, 21, 0.78);
+  /* Surfaces (page, then lifted) */
+  --bg-0: #F4F7FB;          /* page */
+  --bg-1: #FFFFFF;          /* panels, cards, chat column */
+  --bg-2: #F8FAFD;          /* inputs, quiet fills */
+  --bg-3: #E9EFF7;          /* hover / pressed */
+
+  /* Glass (white frost on light surfaces) */
+  --glass: rgba(255, 255, 255, 0.68);
+  --glass-strong: rgba(255, 255, 255, 0.9);
   --glass-blur: 18px;
 
+  /* Glass on sky (hero only: white-on-blue) */
+  --glass-sky: rgba(255, 255, 255, 0.06);
+  --glass-sky-strong: rgba(255, 255, 255, 0.15);
+  --glass-edge: rgba(255, 255, 255, 0.75);
+  --glass-edge-soft: rgba(255, 255, 255, 0.12);
+
   /* Lines */
-  --line: rgba(230, 240, 210, 0.10);
-  --line-strong: rgba(230, 240, 210, 0.22);
-  --line-signal: rgba(200, 241, 105, 0.55);
+  --line: rgba(14, 40, 80, 0.10);
+  --line-strong: rgba(14, 40, 80, 0.18);
+  --line-signal: rgba(29, 100, 200, 0.45);
 
   /* Text */
-  --text-1: #eef0e6;
-  --text-1-soft: #c4c8b9;
-  --text-2: #a9ad9d;
-  --text-3: #7f8373;
+  --text-1: #0E1E33;        /* primary: 15.6:1 on bg-0 */
+  --text-1-soft: #263852;
+  --text-2: #3F5068;        /* secondary: 7.6:1 */
+  --text-3: #5C6B80;        /* labels, meta: 5:1 on bg-0 */
+  --on-sky: #FFFFFF;        /* text on the sky gradient */
 
-  /* Moss (atmosphere, never text) */
-  --moss-glow: #4a5a22;
-  --moss-deep: #222a13;
-  --moss-mid: #5f7a2c;
+  /* Atmosphere (glows and dotted links, never text) */
+  --haze: rgba(48, 133, 210, 0.14);   /* radial glows on light sections */
+  --haze-deep: rgba(48, 133, 210, 0.24);
+  --link-rest: #9DB9DA;     /* dotted links at rest */
 
   /* Signal (the one accent) */
-  --signal: #c8f169;
-  --signal-soft: #e6f7b0;
-  --signal-dim: #8fae4f;
-  --on-signal: #0b0d07;
+  --signal: #1D64C8;        /* blue: CTAs, active node, live state (5.3:1 on bg-0) */
+  --signal-soft: #4A8FE3;   /* gradient top, highlights */
+  --signal-dim: #2B5C99;    /* blue text when full signal is too loud */
+  --signal-tint: rgba(29, 100, 200, 0.08);
+  --on-signal: #FFFFFF;     /* text on signal: 5.7:1 */
 
   /* Data */
-  --up: #a6e07a;
-  --down: #e8735a;
+  --up: #1C7C54;
+  --down: #C2412D;
 
   /* Type */
-  --font-display: 'Manrope', system-ui, sans-serif;
+  --font-display: 'Instrument Sans', system-ui, sans-serif;
   --font-accent: 'Instrument Serif', Georgia, serif;
   --font-mono: 'Geist Mono', ui-monospace, monospace;
 
@@ -51,19 +66,21 @@
   --r-lg: 22px;
   --r-pill: 999px;
 
-  /* Glow */
-  --glow-signal: 0 0 0 1px rgba(200, 241, 105, .35), 0 8px 32px -6px rgba(200, 241, 105, .45);
-  --glow-node: 0 0 18px rgba(200, 241, 105, .55);
-  --shadow-panel: 0 30px 80px -30px rgba(0, 0, 0, .8);
+  /* Elevation: soft navy shadows instead of glows */
+  --glow-signal: inset 0 1px 0 rgba(255, 255, 255, .25), 0 8px 24px -8px rgba(29, 100, 200, .55);
+  --glow-node: 0 0 0 4px rgba(29, 100, 200, .14);
+  --shadow-card: 0 1px 2px rgba(14, 40, 80, .05), 0 12px 32px -16px rgba(14, 40, 80, .18);
+  --shadow-panel: 0 24px 64px -24px rgba(14, 40, 80, .28);
 
   /* Motion */
   --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-soft: cubic-bezier(.22, 1, .36, 1);
   --ease-in-out: cubic-bezier(.65, 0, .35, 1);
   --t-fast: 160ms;
   --t-base: 320ms;
   --t-slow: 700ms;
 
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 /* ---------- Base ---------- */
@@ -83,18 +100,6 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Grain: fixed, non-interactive, never on a scrolling layer. */
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  pointer-events: none;
-  opacity: 0.05;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
 a { color: inherit; }
 button { font: inherit; color: inherit; cursor: pointer; }
 button:disabled { cursor: default; }
@@ -102,7 +107,7 @@ img { max-width: 100%; display: block; }
 
 :focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
 h1, h2, h3 { text-wrap: balance; }
-::selection { background: rgba(200, 241, 105, .28); color: var(--text-1); }
+::selection { background: rgba(29, 100, 200, .18); color: var(--text-1); }
 
 /* ---------- Type helpers ---------- */
 
@@ -110,8 +115,8 @@ h1, h2, h3 { text-wrap: balance; }
   font-family: var(--font-accent);
   font-style: italic;
   font-weight: 400;
-  font-size: 1.05em;
-  letter-spacing: -0.01em;
+  font-size: 1.08em;
+  letter-spacing: -0.02em;
   color: var(--signal);
 }
 
@@ -138,6 +143,7 @@ h1, h2, h3 { text-wrap: balance; }
   font-family: var(--font-display);
   font-size: 15px;
   font-weight: 500;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   text-decoration: none;
   border: 1px solid transparent;
@@ -156,12 +162,12 @@ h1, h2, h3 { text-wrap: balance; }
 }
 .pill-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 0 0 1px rgba(200, 241, 105, .45), 0 10px 40px -6px rgba(200, 241, 105, .6);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 12px 32px -8px rgba(29, 100, 200, .65);
 }
 .pill-primary:disabled { opacity: .45; transform: none; box-shadow: none; }
 
 .pill-ghost {
-  background: transparent;
+  background: var(--bg-1);
   color: var(--text-1);
   border-color: var(--line-strong);
 }
@@ -187,10 +193,10 @@ h1, h2, h3 { text-wrap: balance; }
   text-decoration: none;
   transition: background var(--t-fast), color var(--t-fast);
 }
-.mono-btn:hover:not(:disabled) { color: var(--text-1); background: #262b1e; }
+.mono-btn:hover:not(:disabled) { color: var(--text-1); background: #DCE5F1; }
 .mono-btn:disabled { opacity: .4; }
-.mono-btn.light { background: var(--text-1); color: var(--bg-0); }
-.mono-btn.light:hover { background: #fff; color: var(--bg-0); }
+.mono-btn.light { background: var(--text-1); color: #fff; }
+.mono-btn.light:hover { background: #1B3150; color: #fff; }
 
 /* Icon-only button: 36px target, quiet until hovered. Always give it an aria-label. */
 .icon-btn {
@@ -215,10 +221,10 @@ h1, h2, h3 { text-wrap: balance; }
 
 .glass {
   background: var(--glass);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
   border: 1px solid var(--line);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8), var(--shadow-card);
 }
 
 /* Ring mark: the dot-in-circle from the outline cards (6.4). */
@@ -236,18 +242,18 @@ h1, h2, h3 { text-wrap: balance; }
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--text-1);
+  background: var(--text-3);
   transition: background var(--t-fast), box-shadow var(--t-fast);
 }
 .ring-mark.on::after { background: var(--signal); box-shadow: var(--glow-node); }
 
-/* Logo mark: the product's root node, two rings around a lit dot. */
+/* Logo mark: the product's root node, a ring around a lit dot. */
 .logo {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 600;
   font-size: 15px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -270,9 +276,13 @@ h1, h2, h3 { text-wrap: balance; }
   background: var(--signal);
   box-shadow: var(--glow-node);
 }
+/* On the sky gradient the mark goes white. */
+.on-sky .logo, .logo.on-sky { color: var(--on-sky); }
+.on-sky .logo-mark, .logo.on-sky .logo-mark { border-color: rgba(255, 255, 255, .7); }
+.on-sky .logo-mark::after, .logo.on-sky .logo-mark::after { background: #fff; box-shadow: 0 0 0 4px rgba(255, 255, 255, .18); }
 
 @media (prefers-reduced-transparency: reduce) {
-  .glass { background: var(--bg-2); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .glass { background: var(--bg-1); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
