@@ -3,79 +3,93 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>NetPrep · Meet the right people</title>
-  <meta name="description" content="Tell NetPrep your goal. It maps real people worth meeting and writes talking points for each one." />
-  <meta name="theme-color" content="#070806" />
+  <title>NetPrep · Every person has a story.</title>
+  <meta name="description" content="Tell NetPrep your goal. It maps real people worth meeting and writes talking points from the story behind each one." />
+  <meta name="theme-color" content="#3085D2" />
+  <link rel="icon" href="data:," />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500&family=Instrument+Serif:ital@1&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@1&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <!-- The hero fetches these with fetch() for byte progress, so the preload must be as="fetch". -->
+  <link rel="preload" as="fetch" crossorigin href="https://assets.uberdesigner.ai/easylog/log-bare.webp" />
+  <link rel="preload" as="fetch" crossorigin href="https://assets.uberdesigner.ai/easylog/log-moss.webp" />
   <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/light/style.css" />
   <link rel="stylesheet" href="/tokens.css" />
   <link rel="stylesheet" href="/landing.css" />
+  <noscript><style>.hero [data-intro] { opacity: 1 !important; } .counter { display: none; }</style></noscript>
 </head>
 <body>
-  <div id="top-sentinel" aria-hidden="true"></div>
-
-  <!-- Nav: floating glass pill -->
-  <header class="nav glass" data-load="0">
+  <!-- Compact nav: appears once the hero has scrolled away -->
+  <header class="stickynav glass" aria-label="Site">
     <a class="logo" href="/"><span class="logo-mark" aria-hidden="true"></span>NetPrep</a>
     <nav class="nav-links" aria-label="Sections">
       <a href="#how">How it works</a>
       <a href="#map">The map</a>
       <a href="#practice">Practice</a>
     </nav>
-    <div class="nav-actions" id="nav-guest">
+    <div class="nav-actions" data-guest>
       <a class="pill pill-ghost sm" href="/login">Sign in</a>
       <a class="pill pill-primary sm" href="/signup">Get started <i class="ph-light ph-arrow-right arrow" aria-hidden="true"></i></a>
     </div>
-    <div class="nav-actions" id="nav-user" hidden>
+    <div class="nav-actions" data-user hidden>
       <a class="pill pill-primary sm" href="/app">Open app <i class="ph-light ph-arrow-right arrow" aria-hidden="true"></i></a>
     </div>
   </header>
 
   <main>
-    <!-- Hero -->
-    <section class="hero" aria-labelledby="hero-title">
-      <div class="hero-bg" aria-hidden="true">
-        <canvas id="hero-field" class="hero-field"></canvas>
-        <svg id="hero-net" class="hero-net" viewBox="-600 -600 1200 1200"></svg>
-        <svg id="hero-tether" class="hero-tether"></svg>
+    <!-- Hero: a bare log on the sky; the cursor grows moss on it (landing-hero.js) -->
+    <section class="hero on-sky" id="hero" aria-labelledby="hero-title">
+      <div class="log" aria-hidden="true">
+        <canvas class="log-canvas"></canvas>
+        <div class="log-clip"><div class="log-img"></div></div>
+        <div class="log-probe"></div>
       </div>
 
-      <div class="hero-inner">
-        <a class="announce glass" href="#map" data-load="1">
-          <span class="announce-new">New</span>
-          <span>Real people, found by live search</span>
-          <i class="ph-light ph-caret-right" aria-hidden="true"></i>
-        </a>
-        <h1 id="hero-title" class="display">
-          <span class="line" data-load="2">Meet the right people.</span>
-          <span class="line" data-load="3"><span class="accent">Rehearse</span> the first hello.</span>
+      <header class="hnav" data-intro="nav">
+        <a class="logo hnav-logo" href="/"><span class="logo-mark" aria-hidden="true"></span>NetPrep</a>
+        <nav class="hnav-pill edge" aria-label="Sections">
+          <a href="#how">How it works</a>
+          <a href="#map">The map</a>
+          <a href="#proof">Proof</a>
+          <a href="#practice">Practice</a>
+          <a href="/app">App</a>
+        </nav>
+        <a class="hnav-btn edge" href="/login" data-guest-btn>Sign in</a>
+      </header>
+
+      <div class="hero-top">
+        <h1 id="hero-title" class="headline" aria-label="Every person has a story." data-intro="headline">
+          <span class="hl hl-serif" aria-hidden="true">Every person</span>
+          <span class="hl hl-sans" aria-hidden="true">has a story.</span>
         </h1>
-        <p class="hero-sub" data-load="4">Tell <span translate="no">NetPrep</span> your goal. It maps real people worth meeting and writes talking points for each one.</p>
-        <div class="hero-ctas" data-load="5">
-          <a class="pill pill-primary" href="/signup" data-cta>Map my network <i class="ph-light ph-arrow-right arrow" aria-hidden="true"></i></a>
-          <a class="pill pill-ghost" href="#how">See how it works</a>
-        </div>
-        <ul class="checks" data-load="5">
-          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>Real, linked profiles</li>
-          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>No LinkedIn login</li>
-          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>Built for students</li>
-        </ul>
+        <p class="lead" data-intro="lead">Tell <span translate="no">NetPrep</span> your goal. It finds real people worth meeting, and the story behind each one.</p>
       </div>
+
+      <div class="action">
+        <p class="action-copy" data-intro="action"><span translate="no">NetPrep</span> turns one sentence into a map of real people, with talking points from their actual story.</p>
+        <a class="cta" href="/signup" data-cta data-intro="cta">Map my network</a>
+      </div>
+
+      <div class="bottombar" data-intro="bottom">
+        <a class="scroll-hint" href="#how"><span class="scroll-circle" aria-hidden="true">↓</span>Scroll down for more</a>
+        <span>Free while in beta</span>
+      </div>
+
+      <p class="counter" aria-hidden="true"><span class="counter-num">00</span><span class="counter-pct">%</span></p>
     </section>
 
     <!-- How it works -->
     <section id="how" class="section how" aria-labelledby="how-title">
       <div class="wrap">
         <div class="opener reveal">
+          <p class="label section-tag">Fig. 01 — How it works</p>
           <h2 id="how-title" class="h1">From one sentence<br />to a <span class="accent">map</span>.</h2>
           <p class="side-caption">Describe it once, <br />then shape it by hand.</p>
         </div>
 
         <div class="steps">
-          <article class="step glass reveal" style="--i: 0">
-            <p class="fig label">Fig. 01</p>
+          <article class="step reveal" style="--i: 0">
+            <p class="fig label">01</p>
             <header class="step-head">
               <span class="icon-tile"><i class="ph-light ph-chat-circle-text" aria-hidden="true"></i></span>
               <h3>Describe your goal</h3>
@@ -87,8 +101,8 @@
             </div>
           </article>
 
-          <article class="step glass reveal" style="--i: 1">
-            <p class="fig label">Fig. 02</p>
+          <article class="step reveal" style="--i: 1">
+            <p class="fig label">02</p>
             <header class="step-head">
               <span class="icon-tile"><i class="ph-light ph-tree-structure" aria-hidden="true"></i></span>
               <h3>Get your map</h3>
@@ -114,8 +128,8 @@
             </div>
           </article>
 
-          <article class="step glass reveal" style="--i: 2">
-            <p class="fig label">Fig. 03</p>
+          <article class="step reveal" style="--i: 2">
+            <p class="fig label">03</p>
             <header class="step-head">
               <span class="icon-tile"><i class="ph-light ph-target" aria-hidden="true"></i></span>
               <h3>Walk in prepared</h3>
@@ -135,23 +149,25 @@
     <section id="map" class="section map-section" aria-labelledby="map-title">
       <div class="wrap">
         <div class="opener reveal">
+          <p class="label section-tag">Fig. 02 — The map</p>
           <h2 id="map-title" class="h1">See who matters,<br />and <span class="accent">why</span>.</h2>
           <p class="side-caption">Every branch is a <br />reason to reach out.</p>
         </div>
         <figure class="shot reveal">
           <div class="shot-frame">
             <img src="/assets/map-example.jpg" width="1600" height="1000" loading="lazy"
-              alt="The NetPrep app: a goal on the left branches into four groups of people, and a detail sheet shows one person's background and three talking points." />
+              alt="The NetPrep app: a goal on the left branches into groups of people, and a detail sheet shows one person's background and talking points." />
           </div>
-          <figcaption><span class="label">Fig. 04 / The map</span><span>Example map. The people shown are illustrative.</span></figcaption>
+          <figcaption><span class="label">Fig. 02 / The map</span><span>Example map. The people shown are illustrative.</span></figcaption>
         </figure>
       </div>
     </section>
 
     <!-- Proof, as outcomes (no invented metrics) -->
-    <section class="section proof" aria-labelledby="proof-title">
+    <section id="proof" class="section proof" aria-labelledby="proof-title">
       <div class="wrap proof-grid">
         <div class="proof-copy reveal">
+          <p class="label section-tag">Fig. 03 — Proof</p>
           <h2 id="proof-title" class="h1">Built to be<br /><span class="accent">checked</span>.</h2>
           <p class="body">Every suggestion traces back to something you can open and read yourself.</p>
         </div>
@@ -192,7 +208,7 @@
           <h2 id="practice-title" class="h1">Practice with<br />their <span class="accent">double</span>.</h2>
           <p class="body">Rehearse the coffee chat with an agent briefed on the person's real background, then get notes on how it went.</p>
         </div>
-        <div class="transcript glass reveal" style="--i: 1" aria-label="Preview of a practice conversation">
+        <div class="transcript reveal" style="--i: 1" aria-label="Preview of a practice conversation">
           <div class="transcript-head">
             <span class="label">Practice mode</span>
             <span class="label">Preview</span>
@@ -213,16 +229,15 @@
       </div>
     </section>
 
-    <!-- Closing CTA -->
+    <!-- Closing CTA: a strip of the hero's sky -->
     <section class="section closing" aria-labelledby="closing-title">
       <div class="wrap">
-        <div class="closing-copy reveal">
-          <h2 id="closing-title" class="h1">Your next coffee chat<br />starts with a <span class="accent">map</span>.</h2>
-          <a class="pill pill-primary" href="/signup" data-cta>Map my network <i class="ph-light ph-arrow-right arrow" aria-hidden="true"></i></a>
-        </div>
-        <!-- TODO: replace the dot field with owned macro-moss / particle-mesh art (2400x600), masked the same way. -->
-        <div class="banner reveal" aria-hidden="true">
-          <canvas id="banner-field"></canvas>
+        <div class="banner reveal on-sky">
+          <canvas id="banner-field" aria-hidden="true"></canvas>
+          <div class="banner-copy">
+            <h2 id="closing-title" class="h1">Your next coffee chat<br />starts with a <span class="accent">map</span>.</h2>
+            <a class="cta" href="/signup" data-cta>Map my network <i class="ph-light ph-arrow-right arrow" aria-hidden="true"></i></a>
+          </div>
         </div>
       </div>
     </section>
@@ -240,7 +255,11 @@
     </div>
   </footer>
 
+  <div class="cursor" aria-hidden="true"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.15.0/gsap.min.js"></script>
   <script src="/field.js"></script>
+  <script src="/landing-hero.js"></script>
   <script src="/landing.js"></script>
 </body>
 </html>

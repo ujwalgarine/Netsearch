@@ -6,7 +6,7 @@ const submit = document.getElementById('submit');
 const formError = document.getElementById('form-error');
 const next = new URLSearchParams(location.search).get('next') || '';
 
-if (window.DotField) window.DotField(document.getElementById('auth-field'), { crest: 0.78, rest: 0.06 });
+if (window.DotField) window.DotField(document.getElementById('auth-field'), { crest: 0.78, rest: 0.1, ink: [255, 255, 255], crestInk: [255, 255, 255] });
 
 // Carry ?next= across the switch link, so "sign up instead" still lands where the visitor was going.
 if (next) {

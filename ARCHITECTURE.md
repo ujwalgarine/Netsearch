@@ -14,6 +14,7 @@ Read this first before changing the app. It covers the file map, routes, databas
 server.js              Express app: security headers, page routes, all /api routes, the planner (planTurn), people search
 lib/auth.js            Supabase auth: session cookies, refresh, page/API guards, signup/login/logout/me, rate limits, Origin check
 lib/store.js           Data access: conversations, messages, map versions, connections (list, filters, status/notes/follow-up), all filtered by user_id
+lib/practice.js        Practice sessions: data access, persona / coach / report prompts, demo mode, report schema, validator and verbatim-quote check
 lib/insights.js        Insights summary (KPIs, funnel, mix, 12-week activity, follow-ups) and networking tips (summary → hash → tips_cache)
 people.js              Exa people search + the model writing each person's summary and talking points
 mock.js                Demo plan/people when there's no OpenAI key
@@ -21,17 +22,20 @@ supabase/schema.sql    Tables, indexes, row level security, delete_my_account().
 tests/helpers.js       Test server on a random port, cookie-keeping client, direct-to-database client
 tests/api.test.js      Auth, conversations, maps
 tests/insights.test.js Connections, insights summary, tips cache
+tests/practice.test.js Practice: sessions, streaming, turn limit, idempotent end, report schema, ownership
 
-public/tokens.css      "Moss & Signal" design tokens + shared primitives (see design inspiration/design.md)
+public/tokens.css      "Sky & Signal" design tokens + shared primitives (see design inspiration/design.md)
 public/field.js        Dot-matrix wave canvas used on every page
 public/landing.*       Landing page at /
+public/landing-hero.js Hero intro (GSAP), log canvas + moss mask, custom cursor
 public/login.html      /login        ┐ share public/auth.css and public/auth.js
 public/signup.html     /signup       ┘
 public/app.html        The app at /app/*: sidebar shell + all views
 public/shell.css       Sidebar / bottom tab bar, Past chats, Account, dialogs
 public/shell.js        Client router, sidebar, Past chats, Account, sign out
 public/connections.js  Connections page + the shared tracker (status pipeline, follow-up date, autosaved notes) used on the map too
-public/insights.js     Insights page: KPI tiles, D3 charts (with tooltips and table views), follow-ups, tips
+public/insights.js     Insights page: KPI tiles, D3 charts (with tooltips and table views), practice score trend, follow-ups, tips
+public/practice.js     Practice: history, setup, the SSE-streamed chat, hints, the feedback report (practice.css: its styles)
 public/insights.css    Styles for Connections and Insights
 public/styles.css      Chat + map + detail panel styles
 public/app.js          Chat, D3 map, editing, saving the open chat (startNewMap / openConversation / save)
@@ -45,7 +49,7 @@ public/app.js          Chat, D3 map, editing, saving the open chat (startNewMap 
 | `/login`, `/signup` | the form | redirect to `next` (or `/app`) |
 | `/app`, `/app/*` | redirect to `/login?next=<path>` | `app.html`; `shell.js` picks the view |
 
-App views (client routes in `shell.js`): `/app` (new map), `/app/c/:id` (a saved chat), `/app/chats`, `/app/connections`, `/app/connections/:id` (with its detail sheet open), `/app/practice` and `/app/practice/new?connection=<id>` (still a placeholder: the next step builds it), `/app/insights`, `/app/account`.
+App views (client routes in `shell.js`): `/app` (new map), `/app/c/:id` (a saved chat), `/app/chats`, `/app/connections`, `/app/connections/:id` (with its detail sheet open), `/app/practice` (history), `/app/practice/new?connection=<id>` (setup), `/app/practice/:id` (the chat while active, the report once ended), `/app/insights`, `/app/account`.
 
 `next` values are only followed if they are same-site relative paths (`safeNext` in `lib/auth.js`).
 
@@ -74,6 +78,12 @@ Every write (POST, PUT, PATCH or DELETE) must carry an `Origin` header matching 
 | GET `/api/insights/summary` | query: `today=YYYY-MM-DD` (the browser's date, for follow-ups) | `{today, kpis, funnel, mix, activity: {weeks}, followups}` (see Insights below) |
 | POST `/api/insights/tips` | | `{tips, source: 'llm' \| 'demo' \| 'starter', cached, generated_at?}`. Rate limited to 20 per 10 minutes per user. |
 | POST `/api/people` | `{goal, profile, branch, exclude, count}` | `{people}`. Exa search + write-ups (not saved; the browser saves the map afterwards). |
+| GET `/api/practice` | | `{sessions: [{id, status, score, created_at, ended_at, connection_id, connection: {name, title, organization}, goal, mood, length, max_turns, persona, demo}]}`, newest first |
+| GET `/api/practice/:id` | | The same fields plus `goal_key, talking_points, turns_used, messages, report` |
+| POST `/api/practice` | `{connection_id, goal, mood, length}` | 201 `{id, opening, persona, max_turns, demo}`. `goal` is `learn_role`, `break_in`, `referral` or any other text (a custom goal, ≤ 300 chars). `mood`: `friendly \| busy \| skeptical`. `length`: `short` (8 user turns) `\| standard` (14) `\| long` (20). Saves the opening line, logs `practice_started`. 404 if the connection isn't yours. |
+| POST `/api/practice/:id/message` | `{content}` (≤ 1,000 chars) | `text/event-stream`: `start {turn, max_turns}`, `delta {text}`…, `done {turn, max_turns, turns_left, limit_reached, demo}` or `error {error}`. Both messages are saved once the reply is complete. 409 when the session has ended or the turn limit is reached; 400 on an empty or too-long message. |
+| POST `/api/practice/:id/hint` | | `{hint, demo}`: one suggested next question from a separate coach call. Not saved. 409 once ended. |
+| POST `/api/practice/:id/end` | | `{id, status, score, report, demo}`. Generates and stores the report, logs `practice_completed`. Idempotent: later calls return the stored report. With no user messages the session is closed as `abandoned` with `report: null`. |
 
 ### How one chat turn flows
 
@@ -84,10 +94,25 @@ Every write (POST, PUT, PATCH or DELETE) must carry an `Origin` header matching 
 
 The map JSON keeps the shape `{ goal, profile, branches: [{ id, label, why, query, people, status, error, token, collapsed? }] }`, and person objects are the ones `people.js` returns. The person `id` (their profile URL) is the connection's `person_key`.
 
+## Practice
+
+`lib/practice.js` holds everything server-side; the routes in `server.js` are thin.
+
+- **Session:** `practice_sessions.scenario_json` stores the setup (`goal`, `goal_label`, `mood`, `length`, `max_turns`), the `persona` (`first_name`, `label`, `title`, `organization`, `branch_label`, `why`), a `connection` snapshot `{name, title, organization}` for the user's own screens, the connection's `talking_points`, the map's goal and user profile (`map_goal`, `user_profile`), and `mock`. `status` is `active`, `completed` or `abandoned`. `score` and `feedback_json` are set on end.
+- **Persona:** the server picks the first name from a fixed list, skipping any part of the real person's name, and replaces the real name inside `why`. The real name is never sent to the model. The system prompt (`personaPrompt`) carries the brief's rules: never claim to be a real named person or invent private facts, stay in character with 1-4 sentence replies, react to question quality and to an early ask according to the mood, step out briefly if the user breaks the role-play, and frame hiring advice as personal experience. Each mood adds its own behavior: friendly, busy (about 15 minutes, short answers) or skeptical (the user has to earn it).
+- **Streaming:** `replyStream` yields chunks from `chat.completions.create({stream: true})`, and the route forwards each as an SSE `delta`. The browser reads the stream with `fetch` + `TextDecoderStream`, so the POST body and the Origin check work as for every other write.
+- **Turns:** user messages are counted. The route refuses a message once the count reaches `max_turns`. The `done` event says `limit_reached` and the browser then calls `/end`.
+- **Report:** `generateReport` asks for `REPORT_SCHEMA` (strict `json_schema`): `overall_score` 1-10, `summary`, `rubric` {opening, curiosity, listening, specificity, ask, close} each `{score 1-5, evidence, note}`, 3 `strengths`, 3 `improvements`, `rewrite` `{original, stronger, why}` or null, and `follow_up_message`. `cleanReport` clamps the scores and keeps 3 items per list. It sets any `evidence` (and the whole `rewrite`) to null unless the quote appears verbatim in one of the user's own messages. `validateReport` checks a report against the schema plus those ranges and counts.
+- **Concurrency:** `/end` updates only a row still `active`, so one caller wins. A racing second call serves the stored report, and `practice_completed` is logged once.
+- **Demo mode** (no OpenAI key): the opening line is a template, replies rotate through `MOCK_LINES` (6 lines, streamed word by word), hints come from the talking points then a fixed list, and `mockReport` builds a deterministic report whose quotes are first sentences of the user's own messages. API responses carry `demo: true` and the UI shows a Demo badge.
+- **Rate limit:** create, message, hint and end share the per-user LLM limiter with tips (20 per 10 minutes). The 429 message names practice for these routes.
+- **Models:** the model calls send no `temperature` or `max_tokens`, like the planner, because newer models reject non-default values. Reply length is set by the prompt.
+
 ## Insights
 
 Everything is computed on the server from the user's own rows. No numbers are invented, and a new user gets zeros, `reply_rate: null` and empty lists.
 
+- **Practice score trend** (browser only): `public/insights.js` reads `GET /api/practice` alongside the summary and plots each completed session's `score`, oldest first, as a D3 line with the usual tooltip and Table toggle. With fewer than 2 completed sessions it shows an empty state.
 - `kpis`: `maps_created` (count of `map_created` events), `connections_saved` (status ≠ suggested), `reached_out` (contacted or later), `replied` (replied or later), `reply_rate` (replied ÷ reached out, `null` when nothing has been contacted), `met`, and `practice_completed` (practice_sessions with status `completed`).
 - `funnel`: one entry per stage (saved → contacted → replied → meeting_set → met). `reached` counts connections at that stage or later, `current` counts those there now, and `conversion` is reached ÷ the previous stage's reached.
 - `mix`: tracked connections by branch (top 8 plus "Other") and by organization (top 8).
@@ -103,7 +128,7 @@ Everything is computed on the server from the user's own rows. No numbers are in
 **Charts** are drawn with D3 in `public/insights.js`:
 - Funnel and mix are ranked bars, each label on its own line above its bar.
 - Activity is three small-multiple column charts, one per series.
-- Lime marks the primary series only (the funnel and outreach). Secondary series use the dim signal color, and "Other" is gray.
+- Signal blue marks the primary series only (the funnel and outreach). Secondary series use the dim signal color, and "Other" is gray.
 - Every chart has a hover/focus tooltip and a Table toggle.
 
 ## Database (`supabase/schema.sql`)
@@ -124,7 +149,7 @@ All ids are `uuid` or `bigint identity`, and timestamps are `timestamptz` (ISO s
 | `events` | id, user_id, type, ref_id, created_at: an append-only analytics log |
 
 - **Connection status** is one of `suggested | saved | contacted | replied | meeting_set | met`. Saving a map upserts one connection per person on it and refreshes their details but never the status or notes. People taken off the map are deleted only while they're still `suggested`.
-- **Events logged so far:** `signup`, `map_created` (the first map version of a conversation) and `connection_status_changed` (only when the status actually changes). `practice_started` and `practice_completed` are for the practice feature.
+- **Events logged:** `signup`, `map_created` (the first map version of a conversation), `connection_status_changed` (only when the status actually changes), `practice_started` (a session is created) and `practice_completed` (a report is stored, once per session).
 - **Row level security:** every table allows select, insert, update and delete only where `user_id = auth.uid()`. Inserts and updates on child tables also require the parent to be yours. `events` has no update policy.
 - **`delete_my_account()`:** a `security definer` function that deletes `auth.users` where `id = auth.uid()`. It can be executed by `authenticated` only.
 

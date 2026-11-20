@@ -24,7 +24,7 @@
   appearance: none;
   border: 1px solid var(--line);
   border-radius: var(--r-pill);
-  background: var(--bg-2);
+  background: var(--bg-1);
   color: var(--text-1);
   font: inherit;
   font-size: 14px;
@@ -32,8 +32,8 @@
   cursor: pointer;
   outline: none;
 }
-.select-field select:focus-visible { border-color: var(--line-signal); box-shadow: 0 0 0 4px rgba(200, 241, 105, .08); }
-.select-field option { background: var(--bg-2); }
+.select-field select:focus-visible { border-color: var(--line-signal); box-shadow: 0 0 0 4px var(--signal-tint); }
+.select-field option { background: var(--bg-1); }
 
 .conn-count { max-width: 860px; margin: 28px auto 12px; }
 .page-view:has(.conn-table-wrap) .page-head,
@@ -58,7 +58,7 @@
 }
 .conn-table td { padding: 14px 12px; border-bottom: 1px solid var(--line); color: var(--text-2); vertical-align: middle; }
 .conn-table tbody tr { cursor: pointer; transition: background var(--t-fast); }
-.conn-table tbody tr:hover, .conn-table tbody tr.active { background: var(--bg-1); }
+.conn-table tbody tr:hover, .conn-table tbody tr.active { background: rgba(29, 100, 200, .045); }
 .conn-table tbody tr.active td:first-child { box-shadow: inset 2px 0 0 var(--signal); }
 .conn-table tbody tr:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }
 .conn-table .who { min-width: 180px; }
@@ -96,7 +96,7 @@
 
 /* ---------------- Tracker (connection sheet + map person panel) ---------------- */
 
-.tracker { margin: 4px 0 24px; padding: 16px; border: 1px solid var(--line); border-radius: var(--r-md); background: rgba(255, 255, 255, .015); }
+.tracker { margin: 4px 0 24px; padding: 16px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-2); }
 .tracker-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
 .tracker-head .tag { margin: 0; }
 .save-state { color: var(--text-3); min-height: 11px; }
@@ -107,7 +107,7 @@
   gap: 2px;
   padding: 3px;
   border-radius: var(--r-sm);
-  background: var(--bg-1);
+  background: var(--bg-3);
   border: 1px solid var(--line);
 }
 .seg {
@@ -125,9 +125,9 @@
   text-overflow: ellipsis;
   transition: background var(--t-fast), color var(--t-fast);
 }
-.seg:hover { color: var(--text-1); background: var(--bg-3); }
+.seg:hover { color: var(--text-1); background: rgba(255, 255, 255, .6); }
 .seg.passed { color: var(--text-2); }
-.seg[aria-checked='true'] { background: var(--bg-3); color: var(--signal); box-shadow: inset 0 0 0 1px var(--line-signal); }
+.seg[aria-checked='true'] { background: var(--bg-1); color: var(--signal); font-weight: 500; box-shadow: 0 1px 2px rgba(14, 40, 80, .12), inset 0 0 0 1px var(--line-signal); }
 .tracker-hint { margin: 10px 0 0; font-size: 13px; color: var(--text-3); }
 
 .tracker-fields { margin: 16px 0 0; }
@@ -141,13 +141,13 @@
   font: inherit;
   font-size: 14px;
   color: var(--text-1);
-  color-scheme: dark;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
+  color-scheme: light;
+  background: var(--bg-1);
+  border: 1px solid var(--line-strong);
   border-radius: var(--r-sm);
   outline: none;
 }
-.date-row input[type='date']:focus { border-color: var(--line-signal); box-shadow: 0 0 0 4px rgba(200, 241, 105, .08); }
+.date-row input[type='date']:focus { border-color: var(--line-signal); box-shadow: 0 0 0 4px var(--signal-tint); }
 .date-clear { width: 34px; height: 34px; font-size: 15px; }
 .tracker-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
 .tracker-foot .pill { gap: 8px; }
@@ -166,12 +166,13 @@
   grid-template-columns: repeat(6, minmax(0, 1fr));
   border: 1px solid var(--line);
   border-radius: var(--r-md);
-  background: linear-gradient(180deg, rgba(255, 255, 255, .025), transparent);
+  background: var(--bg-1);
+  box-shadow: var(--shadow-card);
 }
 .kpi { padding: 18px 18px 16px; min-width: 0; }
 .kpi + .kpi { border-left: 1px solid var(--line); }
 .kpi-label { margin: 0 0 14px; line-height: 1.35; min-height: 2.7em; }
-.kpi-value { margin: 0; font-size: 34px; font-weight: 300; letter-spacing: -0.03em; line-height: 1; color: var(--text-1); }
+.kpi-value { margin: 0; font-size: 34px; font-weight: 400; letter-spacing: -0.04em; line-height: 1; color: var(--text-1); }
 .kpi.kpi-hi .kpi-value { color: var(--signal); }
 .kpi-foot { margin: 10px 0 0; font-size: 12.5px; color: var(--text-3); }
 .kpi-note { margin-top: 12px; }
@@ -187,6 +188,7 @@
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--bg-1);
+  box-shadow: var(--shadow-card);
 }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .card-head h2 { margin: 0; font-size: 18px; font-weight: 500; letter-spacing: -0.01em; }
@@ -231,7 +233,20 @@
 .multiple .col.primary { fill: var(--signal); }
 .multiple .col.secondary { fill: var(--signal-dim); }
 .multiple .hit { fill: transparent; cursor: default; outline: none; }
-.multiple .hit:hover, .multiple .hit:focus-visible { fill: rgba(230, 240, 210, .05); }
+.multiple .hit:hover, .multiple .hit:focus-visible { fill: rgba(14, 40, 80, .05); }
+
+/* Practice score trend */
+.trend { display: block; overflow: visible; }
+.trend .grid { stroke: var(--line); stroke-dasharray: 2 4; }
+.trend .baseline { stroke: var(--line-strong); }
+.trend .tick { fill: var(--text-3); font-family: var(--font-mono); font-size: 10px; font-variant-numeric: tabular-nums; }
+.trend-area { fill: var(--signal-tint); }
+.trend-line { fill: none; stroke: var(--signal); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.trend .pt { fill: var(--bg-1); stroke: var(--signal); stroke-width: 2; }
+.trend .pt.last { fill: var(--signal); }
+.trend-last { fill: var(--text-1); font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.trend .hit { fill: transparent; cursor: default; outline: none; }
+.trend .hit:hover, .trend .hit:focus-visible { fill: rgba(14, 40, 80, .04); }
 
 /* Table view */
 .table-scroll { overflow-x: auto; }
@@ -250,8 +265,8 @@
   padding: 8px 12px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r-sm);
-  background: var(--bg-3);
-  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, .8);
+  background: var(--bg-1);
+  box-shadow: 0 12px 32px -12px rgba(14, 40, 80, .22);
   pointer-events: none;
 }
 .chart-tip strong { font-size: 16px; font-weight: 500; color: var(--text-1); font-variant-numeric: tabular-nums; }
@@ -278,7 +293,7 @@
   text-decoration: none;
   color: inherit;
 }
-.followup:hover .fu-name { color: var(--signal-soft); }
+.followup:hover .fu-name { color: var(--signal); }
 .fu-who { min-width: 0; display: grid; gap: 3px; }
 .fu-name { color: var(--text-1); font-size: 14.5px; transition: color var(--t-fast); }
 .fu-org { font-size: 12.5px; color: var(--text-3); }
@@ -289,7 +304,7 @@
 .tips-section { margin-top: 56px; padding-top: 36px; border-top: 1px solid var(--line); }
 .tips-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
 .tips-head .label { color: var(--signal-dim); }
-.tips-title { margin: 12px 0 0; font-size: 32px; font-weight: 300; letter-spacing: -0.02em; }
+.tips-title { margin: 12px 0 0; font-size: 32px; font-weight: 400; letter-spacing: -0.035em; }
 .tips-note { margin-top: 10px; color: var(--text-3) !important; }
 .tips-head .pill { gap: 8px; }
 .tips-head .pill[aria-busy='true'] i { animation: spin 1s linear infinite; }

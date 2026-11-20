@@ -50,15 +50,27 @@ The chat gets you a first map; after that you can edit it directly.
 - Chat follow-ups ("add a branch for design-to-PM switchers", "drop the recruiters") build on your edited map instead of replacing it.
 - The map is saved to your account as you edit, so a reload picks up where you left off.
 
+### Practice a coffee chat
+
+Open **Practice** in the sidebar, or press **Practice coffee chat** on any saved connection.
+
+- **Set up:** pick the connection, your goal (learn about their role, advice on breaking in, ask for a referral, or your own), their mood (friendly, busy, skeptical) and the length (8, 14 or 20 of your messages). Their talking points stay on screen as a cheat sheet.
+- **Chat:** you talk to a stand-in with a made-up first name who matches the person's role and background. It is never presented as the real person. Replies stream in as they're written. **Hint** asks a coach for one next question, shown only to you and never added to the transcript. **End chat** works any time, and the chat ends itself at the turn limit.
+- **Feedback:** an overall score out of 10; six rubric scores out of 5 (opening, curiosity, listening, specificity about yourself, the ask, the close), each quoting your own words; 3 strengths and 3 things to try; one of your lines rewritten; and a follow-up message draft. Every quote is checked on the server to be word for word from your messages.
+- **History:** every session is listed under Practice, with its transcript and report. **Insights** charts your score over time once you've finished two.
+- Without an OpenAI key, the persona rotates through 6 demo lines and the feedback is a deterministic demo report, both labelled **Demo**.
+
 ## How it works
 
 ```
-public/tokens.css   design tokens + shared buttons, glass, type ("Moss & Signal", see design inspiration/design.md)
+public/tokens.css   design tokens + shared buttons, glass, type ("Sky & Signal", see design inspiration/design.md)
 public/field.js     dot-matrix wave background, shared by the landing page and the map
 public/landing.*    landing page, served at /
+public/landing-hero.js   the hero: preloader, log canvas with cursor-grown moss, GSAP intro
 public/login.html, signup.html, auth.*   sign-in and sign-up pages
 public/app.html     app shell (sidebar + views), served at /app/*
 public/shell.js     app routes, Past chats, Account   (shell.css: their styles)
+public/practice.*   Practice: setup, the streamed role-play chat, the feedback report, history
 public/styles.css   app styling
 public/app.js       chat, map editing, and the D3 branching map
 public/assets/      landing page images (map-example.jpg is a screenshot of the app with illustrative people)
@@ -67,6 +79,7 @@ people.js           Exa people search + talking points grounded in each profile
 mock.js             demo data used when no OpenAI key is set
 lib/auth.js          sign up / sign in / sessions (Supabase Auth, HttpOnly cookies)
 lib/store.js         saved chats, map versions and connections
+lib/practice.js      practice sessions: persona / coach / report prompts, demo mode, report schema + quote check
 supabase/schema.sql  database tables + row level security (run once in Supabase)
 .env                your API keys, model, and port (never commit this)
 ```
@@ -83,7 +96,4 @@ To change the model, edit `OPENAI_MODEL` in `.env`. The planner prompt lives in 
 - Results are public profiles Exa has indexed. Coverage is strong for working professionals and thinner for students and very new grads.
 - Profiles can be out of date. Check the linked profile before reaching out.
 - Most links go to LinkedIn, but some go to personal sites or other profile pages; the button says which.
-
-## Next
-
-- **Coffee-chat practice.** The "Practice coffee chat" button in the person panel is the placeholder for an agent that role-plays the selected person. Each person already carries the profile context that agent would need.
+- Practice POSTs share the per-user AI limit with tips: 20 requests per 10 minutes. A long (20-turn) practice chat plus its start and feedback needs 22, so a very fast long chat can hit the limit.
