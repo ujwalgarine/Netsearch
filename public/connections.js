@@ -425,4 +425,19 @@ function renderConnectionDetail(c) {
     });
     body.append(ol);
   }
+
+  // Their work, as last found on their map (work.js). It is checked and changed from the map.
+  const work = el('div', 'conn-work');
+  body.append(work);
+  request('GET', `/api/connections/${c.id}/work`)
+    .then(({ work: w, conversationId: cid }) => {
+      if (cx.open !== c.id || !w?.items?.length) return;
+      const note = el('p', 'work-note');
+      const a = el('a', null, 'Open their map');
+      a.href = `/app/c/${cid}`;
+      a.dataset.nav = 'map';
+      note.append(a, ' to check again or remove items.');
+      work.append(el('h3', null, 'Work and projects'), workList(w), note);
+    })
+    .catch(() => {});
 }

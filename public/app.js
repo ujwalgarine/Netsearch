@@ -1365,7 +1365,8 @@ function openPerson(branchId, personId) {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
       e.preventDefault();
       e.stopPropagation(); // arrows switch tabs here, not people
-      select(name === 'prep' ? 'profile' : 'prep', true);
+      const names = Object.keys(panels);
+      select(names[(names.indexOf(name) + (e.key === 'ArrowRight' ? 1 : names.length - 1)) % names.length], true);
     });
     const panel = el('div', 'tab-panel');
     panel.id = `panel-${name}`;
@@ -1376,6 +1377,7 @@ function openPerson(branchId, personId) {
     tabs.append(t);
   };
   addTab('prep', 'Prep');
+  addTab('work', p.work?.items?.length ? `Work · ${p.work.items.length}` : 'Work');
   addTab('profile', 'Profile');
   body.append(tabs);
 
@@ -1391,6 +1393,16 @@ function openPerson(branchId, personId) {
   } else {
     panels.prep.append(el('p', 'why', 'No talking points for this person yet.'));
   }
+  const prepWork = el('div');
+  prepWork.id = 'prep-work';
+  prepWork.append(...workPrepContent(p)); // openers from their projects and papers (work.js)
+  panels.prep.append(prepWork);
+
+  // Work: their own public work, from accounts they linked (work.js).
+  const workPanel = el('div');
+  workPanel.id = 'work-panel';
+  workPanel.append(...workPanelContent(branchId, p));
+  panels.work.append(workPanel);
 
   // Profile: the facts the talking points are built from.
   if (p.summary) panels.profile.append(el('p', 'why', p.summary));
@@ -1423,9 +1435,10 @@ function openPerson(branchId, personId) {
   panel.append(...rows);
   panels.profile.append(panel);
 
-  body.append(panels.prep, panels.profile);
+  body.append(panels.prep, panels.work, panels.profile);
   select(personTab);
   showDetail();
+  maybeLookupWork(branchId, p);
 }
 
 function openBranch(id) {

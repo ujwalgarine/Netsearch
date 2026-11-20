@@ -63,3 +63,23 @@ export function mockPeople(label, offset, count) {
     };
   });
 }
+
+// Demo "Work and projects" for a demo person: obvious placeholders with no links.
+export function mockWork({ blocked = [], now = new Date() } = {}) {
+  const day = (n) => new Date(now.getTime() - n * 86_400_000).toISOString().slice(0, 10);
+  const via = 'Demo data';
+  return {
+    fetched_at: now.toISOString(),
+    items: blocked.includes('demo') ? [] : [
+      { kind: 'repo', title: 'sample/onboarding-checklist', url: null, date: day(12), detail: 'Placeholder repo · TypeScript · ★ 42', source: 'Demo', via, account: 'demo' },
+      { kind: 'paper', title: 'A sample paper on measuring product onboarding', url: null, date: day(200), detail: 'Placeholder venue · 3 citations', source: 'Demo', via, account: 'demo' },
+    ],
+    accounts: [],
+    talking_points: blocked.includes('demo') ? [] : ['With EXA_API_KEY set, this shows openers about their real projects and papers, from accounts they linked themselves.'],
+    themes: blocked.includes('demo') ? [] : ['Builds and shares open-source software', 'Publishes research papers'],
+    blocked,
+    skipped: [],
+    notes: [],
+    demo: true,
+  };
+}

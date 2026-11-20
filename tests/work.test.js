@@ -1,0 +1,526 @@
+// Work and projects: link and name rules, the lookup against saved sample responses (shaped like
+// the real Exa, GitHub, ORCID and OpenAlex answers), the routes on a bare app with an in-memory
+// store, the coffee chat partner's themes, and a Supabase block like api.test.js (skipped without it).
+import { describe, test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { randomUUID } from 'node:crypto';
+import express from 'express';
+import { canonicalUrl, githubLogin, githubRepo, orcidId, maybeOwnSite, nameVerdict, companyVerdict, mentionsName, scrubContact } from '../lib/sources/links.js';
+import { createFetcher } from '../lib/sources/http.js';
+import { findWork, generalThemes, isStale, plainPrep } from '../lib/enrich.js';
+import { workRoutes } from '../lib/work.js';
+import * as practice from '../lib/practice.js';
+import { Client, configured, makeEmail, signUp as signUpAs, deleteAccounts, startServer } from './helpers.js';
+
+const NOW = new Date('2026-11-19T12:00:00Z');
+const daysAgo = (n) => new Date(NOW.getTime() - n * 86_400_000).toISOString();
+const clone = (v) => JSON.parse(JSON.stringify(v));
+
+// ---------------------------------------------------------------------------
+// Sample answers
+// ---------------------------------------------------------------------------
+
+const PROFILE = 'https://linkedin.com/in/ada-example';
+const ADA = {
+  id: PROFILE,
+  url: PROFILE,
+  name: 'Ada Example',
+  headline: 'Software Engineer at Contoso',
+  experience: [{ title: 'Software Engineer', company: 'Contoso' }],
+  talking_points: ['Ask about the move to Contoso.'],
+};
+
+const exaProfile = (over = {}) => ({
+  url: PROFILE,
+  title: 'Ada Example',
+  text: '# Ada Example\n\nSoftware Engineer at Contoso\n\n## About\n\nI write about data tools at https://adaexample.dev\n\n## Experience\n\n### Software Engineer - Contoso (Current)\n\n- Maintainer of the Contoso SQL tools https://github.com/contoso/sqltools\n- Reach me at ada@example.com or 206-555-0142',
+  extras: { links: ['linkedin.com/in/ada-example', 'adaexample.dev', 'crunchbase.com/person/ada-example', 'contoso.com/careers'] },
+  entities: [{ type: 'person', properties: { name: 'Ada Example' } }],
+  ...over,
+});
+const exaSite = (over = {}) => ({
+  url: 'https://adaexample.dev/',
+  title: 'Ada Example · data tools',
+  text: "Hi, I'm Ada Example. I build small tools for working with data. Write to ada@example.com.",
+  extras: { links: ['https://github.com/adaex', 'https://orcid.org/0000-0002-1825-0097', 'https://github.com/someone-else/cool-thing'] },
+  ...over,
+});
+const ghUser = (over = {}) => ({ login: 'adaex', type: 'User', name: 'Ada Example', company: '@contoso', blog: 'https://adaexample.dev', html_url: 'https://github.com/adaex', email: 'ada@example.com', bio: 'Data tools.', ...over });
+const ghRepos = () => [
+  { full_name: 'adaex/querykit', name: 'querykit', html_url: 'https://github.com/adaex/querykit', description: 'Tiny SQL query builder. Questions: ada@example.com', language: 'TypeScript', stargazers_count: 41, pushed_at: daysAgo(10), fork: false, archived: false },
+  { full_name: 'adaex/forked', name: 'forked', html_url: 'https://github.com/adaex/forked', description: 'A fork', pushed_at: daysAgo(2), fork: true },
+  { full_name: 'adaex/old-thing', name: 'old-thing', html_url: 'https://github.com/adaex/old-thing', description: 'From long ago', pushed_at: '2019-01-01T00:00:00Z', fork: false },
+  { full_name: 'adaex/archived', name: 'archived', html_url: 'https://github.com/adaex/archived', pushed_at: daysAgo(30), fork: false, archived: true },
+];
+const ghSocial = () => [{ provider: 'linkedin', url: 'https://www.linkedin.com/in/ada-example/' }];
+const ghRepo = () => ({ full_name: 'contoso/sqltools', html_url: 'https://github.com/contoso/sqltools', description: 'SQL tools for Contoso databases', stargazers_count: 310, pushed_at: daysAgo(3) });
+
+// The real ORCID record shape (pub.orcid.org/v3.0/{id}/record), trimmed.
+const orcid = (given = 'Ada', family = 'Example') => ({
+  person: {
+    name: { 'given-names': { value: given }, 'family-name': { value: family }, 'credit-name': null },
+    'researcher-urls': { 'researcher-url': [{ 'url-name': 'Website', url: { value: 'https://adaexample.dev' } }] },
+  },
+  'activities-summary': {
+    works: {
+      group: [
+        { 'external-ids': { 'external-id': [{ 'external-id-type': 'doi', 'external-id-value': '10.5555/12345680', 'external-id-relationship': 'self' }] }, 'work-summary': [{ title: { title: { value: 'Measuring Query Latency' } }, 'publication-date': { year: { value: '2025' } }, 'journal-title': { value: 'Journal of Data' }, type: 'journal-article' }] },
+        { 'external-ids': { 'external-id': [] }, 'work-summary': [{ title: { title: { value: 'Notes on Small Data Tools' } }, 'publication-date': { year: { value: '2023' } }, 'journal-title': null, type: 'report' }] },
+      ],
+    },
+    employments: {
+      'affiliation-group': [
+        { summaries: [{ 'employment-summary': { 'role-title': 'Affiliate Researcher', 'department-name': 'Data Lab', 'start-date': { year: { value: '2024' } }, 'end-date': null, organization: { name: 'Example University', address: { city: 'Seattle' } } } }] },
+        { summaries: [{ 'employment-summary': { 'role-title': 'Intern', 'start-date': { year: { value: '2019' } }, 'end-date': { year: { value: '2019' } }, organization: { name: 'Old Co' } } }] },
+      ],
+    },
+  },
+});
+const alex = () => ({
+  results: [{ id: 'https://openalex.org/W1', display_name: 'Measuring query latency', publication_date: '2025-03-01', cited_by_count: 7, doi: 'https://doi.org/10.5555/12345680', primary_location: { source: { display_name: 'Journal of Data' } }, type: 'article' }],
+});
+
+// A fake network: routes by URL, records every call, and answers like the real APIs.
+function fakeNet(over = {}) {
+  const calls = [];
+  const routes = {
+    exa: (urls) => ({ results: urls.map((u) => (u === PROFILE ? exaProfile() : u.startsWith('https://adaexample.dev') ? exaSite() : null)).filter(Boolean) }),
+    'github:/users/adaex': ghUser,
+    'github:/users/adaex/repos': ghRepos,
+    'github:/users/adaex/social_accounts': ghSocial,
+    'github:/repos/contoso/sqltools': ghRepo,
+    'orcid:0000-0002-1825-0097': () => orcid(),
+    'openalex:0000-0002-1825-0097': alex,
+    ...over,
+  };
+  const reply = (status, body, headers = {}) => new Response(body == null ? 'null' : JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } });
+  const fetchImpl = async (url, opts = {}) => {
+    calls.push(url);
+    const u = new URL(url);
+    let key;
+    if (u.host === 'api.exa.ai') {
+      const body = JSON.parse(opts.body);
+      return reply(200, routes.exa(body.urls, body));
+    }
+    if (u.host === 'api.github.com') key = `github:${u.pathname}`;
+    if (u.host === 'pub.orcid.org') key = `orcid:${u.pathname.split('/')[2]}`;
+    if (u.host === 'api.openalex.org') key = `openalex:${u.searchParams.get('filter').split(':')[1]}`;
+    const route = routes[key];
+    if (typeof route === 'function') return reply(200, route());
+    if (route && route.status) return reply(route.status, route.body ?? {}, route.headers);
+    return reply(404, { message: 'Not Found' });
+  };
+  return { calls, fetchImpl, ctx: { ...createFetcher({ fetchImpl }), exaKey: 'test' } };
+}
+
+const lookup = (net, over = {}) => findWork({ person: ADA, goal: 'Data engineering internship', about: 'CS student', ctx: net.ctx, now: NOW, ...over });
+
+// ---------------------------------------------------------------------------
+// Links and names
+// ---------------------------------------------------------------------------
+
+test('links: accounts, repos and ORCID iDs are recognised; GitHub pages and repos are not accounts', () => {
+  assert.equal(githubLogin('github.com/mattkur'), 'mattkur');
+  assert.equal(githubLogin('https://github.com/adaex/'), 'adaex');
+  assert.equal(githubLogin('https://github.com/adaex/querykit'), null);
+  assert.equal(githubLogin('https://github.com/sponsors'), null);
+  assert.equal(githubLogin('https://gist.github.com/adaex'), null);
+  assert.deepEqual(githubRepo('https://github.com/Azure/data-api-builder'), { owner: 'Azure', repo: 'data-api-builder' });
+  assert.equal(githubRepo('https://github.com/adaex/querykit/issues/3'), null);
+  assert.equal(orcidId('https://orcid.org/0000-0002-1825-009x'), '0000-0002-1825-009X');
+  assert.equal(canonicalUrl('https://www.LinkedIn.com/in/Ada-Example/?trk=x'), 'https://linkedin.com/in/ada-example');
+  assert.equal(canonicalUrl('linkedin.com/in/ada-example'), canonicalUrl('https://uk.linkedin.com/in/ada-example/'));
+  assert.equal(canonicalUrl('javascript:alert(1)'), null);
+});
+
+test('links: own sites exclude platforms, aggregators and employer domains', () => {
+  assert.equal(maybeOwnSite('adaexample.dev', ['Contoso']), true);
+  assert.equal(maybeOwnSite('https://contoso.com/careers', ['Contoso']), false);
+  assert.equal(maybeOwnSite('https://www.crunchbase.com/person/ada', []), false);
+  assert.equal(maybeOwnSite('https://linktr.ee/ada', []), false);
+  assert.equal(maybeOwnSite('mailto:ada@example.com', []), false);
+});
+
+test('names: a namesake with a different name is "none", nicknames and middle names still match', () => {
+  assert.equal(nameVerdict('Ada Example', 'Ada Example'), 'match');
+  assert.equal(nameVerdict('Matt LaFayette (Kurjanowicz)', 'Matt Kurjanowicz'), 'match');
+  assert.equal(nameVerdict('Daniel Rivera', 'Dan Rivera'), 'match');
+  assert.equal(nameVerdict('Ada Example', 'Ada Smith'), 'partial');
+  assert.equal(nameVerdict('Ada Example', 'Bob Builder'), 'none');
+  assert.equal(nameVerdict('Ada Example', 'adaex', 'adaex'), 'unknown');
+  assert.equal(nameVerdict('Ada Example', ''), 'unknown');
+  assert.equal(companyVerdict('@contoso', [{ company: 'Contoso Ltd' }]), 'match');
+  assert.equal(companyVerdict('Fabrikam', [{ company: 'Contoso' }]), 'other');
+  assert.equal(mentionsName('About Ada Example', 'Ada Example'), true);
+  assert.equal(mentionsName('Our team: Ada, Bob and Example Corp', 'Ada Q. Example'), true);
+  assert.equal(mentionsName('Meet the data team', 'Ada Example'), false);
+});
+
+test('contact details are scrubbed, year ranges are kept', () => {
+  const out = scrubContact('Email ada@example.com, ada [at] example [dot] com, call +1 206-555-0142, visit 221 Baker Street. Worked 2019-2023.');
+  assert.doesNotMatch(out, /ada@|\[at\]|555|Baker/);
+  assert.match(out, /2019-2023/);
+});
+
+// ---------------------------------------------------------------------------
+// The lookup
+// ---------------------------------------------------------------------------
+
+test('two hops through their own site: site, GitHub repos, ORCID role and papers, and the project they mention', async () => {
+  const net = fakeNet();
+  const w = await lookup(net);
+  const by = (kind) => w.items.filter((it) => it.kind === kind);
+
+  assert.equal(by('site').length, 1);
+  assert.equal(by('site')[0].via, 'Linked on their LinkedIn profile');
+  assert.deepEqual(by('repo').map((r) => r.title), ['adaex/querykit'], 'own, recent, not forks or archived');
+  assert.equal(by('repo')[0].via, 'Linked on their website', 'profile -> site -> GitHub is two hops');
+  assert.equal(by('project')[0].title, 'contoso/sqltools');
+  assert.match(by('project')[0].detail, /They wrote: “Maintainer of the Contoso SQL tools”/);
+  assert.deepEqual(by('role').map((r) => r.title), ['Affiliate Researcher at Example University'], 'current jobs only');
+  const papers = by('paper');
+  assert.equal(papers.length, 2, 'the same DOI from ORCID and OpenAlex is one item');
+  assert.equal(papers[0].source, 'OpenAlex');
+  assert.match(papers[0].detail, /7 citations/);
+  assert.equal(papers[1].title, 'Notes on Small Data Tools');
+
+  const gh = w.accounts.find((a) => a.kind === 'github');
+  assert.equal(gh.confirmed, true, 'their GitHub links back to the LinkedIn profile');
+  assert.ok(!w.accounts.some((a) => a.links), 'raw link lists are not kept');
+  assert.doesNotMatch(JSON.stringify(w), /ada@example\.com|555-0142/, 'no contact details anywhere');
+  assert.ok(!net.calls.some((u) => u.includes('someone-else')), 'a repo they link to is not treated as theirs');
+  assert.ok(!net.calls.some((u) => u.includes('/search/')), 'never searches by name');
+  assert.ok(net.calls.length <= 9, `about 5 to 8 calls, got ${net.calls.length}`);
+  assert.equal(w.talking_points.length, 2, 'openers written without a model');
+  assert.ok(w.themes.length >= 1);
+  assert.equal(w.fetched_at, NOW.toISOString());
+});
+
+// Exa attaches accounts its index matched to the name (extras.links, and a "## GitHub" section in the
+// text). Those are not links the person made, so they need independent agreement.
+const indexOnly = (links, text = '# Ada Example\n\nEngineer') => ({ exa: () => ({ results: [exaProfile({ text, extras: { links } })] }) });
+
+test('an ORCID the search index matched to the name, with nothing tying it to the profile, is dropped', async () => {
+  const net = fakeNet({ ...indexOnly(['orcid.org/0000-0002-1825-0097']), 'orcid:0000-0002-1825-0097': () => ({ ...orcid(), 'activities-summary': { ...orcid()['activities-summary'], employments: {}, educations: {} }, person: { ...orcid().person, 'researcher-urls': {} } }) });
+  const w = await lookup(net);
+  assert.deepEqual(w.items, [], 'a namesake researcher with the same name');
+  assert.match(w.skipped[0].reason, /does not link back/);
+});
+
+test('a suggested ORCID is kept when it shares a school with the profile, or links back', async () => {
+  const withSchool = () => ({ ...orcid(), person: { ...orcid().person, 'researcher-urls': {} }, 'activities-summary': { ...orcid()['activities-summary'], employments: {}, educations: { 'affiliation-group': [{ summaries: [{ 'education-summary': { organization: { name: 'University of Washington' } } }] }] } } });
+  const school = await lookup(fakeNet({ ...indexOnly(['orcid.org/0000-0002-1825-0097']), 'orcid:0000-0002-1825-0097': withSchool }), { person: { ...ADA, education: [{ school: 'University of Washington', degree: 'BS' }] } });
+  assert.ok(school.items.some((it) => it.kind === 'paper'));
+  assert.match(school.accounts[0].via, /employer or school match/);
+
+  const back = () => ({ ...orcid(), person: { ...orcid().person, 'researcher-urls': { 'researcher-url': [{ url: { value: 'https://www.linkedin.com/in/ada-example' } }] } } });
+  const linked = await lookup(fakeNet({ ...indexOnly(['orcid.org/0000-0002-1825-0097']), 'orcid:0000-0002-1825-0097': back }));
+  assert.equal(linked.accounts[0].confirmed, true);
+  assert.match(linked.accounts[0].via, /links back/);
+});
+
+test('a GitHub account in the page section Exa adds is only a suggestion: kept with a back-link, else dropped', async () => {
+  const text = '# Ada Example\n\nEngineer\n\n## GitHub\n\n[GitHub Profile](https://github.com/adaex)\nUsername: adaex';
+  const noBack = await lookup(fakeNet({ ...indexOnly([], text), 'github:/users/adaex/social_accounts': () => [], 'github:/users/adaex': () => ghUser({ company: '', blog: '' }) }));
+  assert.deepEqual(noBack.items, []);
+  assert.equal(noBack.skipped.length, 1);
+  const back = await lookup(fakeNet({ ...indexOnly([], text), 'github:/users/adaex': () => ghUser({ company: '', blog: '' }) }));
+  assert.ok(back.items.some((it) => it.title === 'adaex/querykit'));
+  assert.equal(back.accounts[0].confirmed, true);
+});
+
+test('two or more of their own project links under one account make that account theirs', async () => {
+  const text = '# Ada Example\n\n## Projects\n\nQuery kit [Project Link](https://github.com/adaex/querykit?trk=public_profile_project-button)\nOld thing [Project Link](https://github.com/adaex/old-thing?trk=public_profile_project-button)';
+  const w = await lookup(fakeNet({ ...indexOnly([], text), 'github:/users/adaex/social_accounts': () => [] }));
+  assert.match(w.accounts.find((a) => a.kind === 'github').via, /Their projects on their LinkedIn profile are on this account/);
+});
+
+test('a namesake with no link is never looked up', async () => {
+  const net = fakeNet({ exa: () => ({ results: [exaProfile({ text: '# Ada Example\n\nEngineer', extras: { links: [] } })] }) });
+  const w = await lookup(net);
+  assert.deepEqual(w.items, []);
+  assert.equal(net.calls.length, 1, 'only the profile itself was read');
+});
+
+test('a linked account whose name contradicts the profile is dropped', async () => {
+  const net = fakeNet({
+    exa: () => ({ results: [exaProfile({ extras: { links: ['github.com/adaex'] }, text: 'Engineer' })] }),
+    'github:/users/adaex': () => ghUser({ name: 'Bob Builder' }),
+  });
+  const w = await lookup(net);
+  assert.deepEqual(w.items, []);
+  assert.equal(w.skipped.length, 1);
+  assert.match(w.skipped[0].reason, /Bob Builder/);
+});
+
+test('a partly matching name is dropped with a different employer, kept with the same one', async () => {
+  const linkOnly = { exa: () => ({ results: [exaProfile({ extras: { links: ['github.com/adaex'] }, text: 'Engineer' })] }) };
+  const other = await lookup(fakeNet({ ...linkOnly, 'github:/users/adaex': () => ghUser({ name: 'Ada Smith', company: '@fabrikam' }) }));
+  assert.equal(other.items.length, 0);
+  assert.match(other.skipped[0].reason, /employer/);
+  const same = await lookup(fakeNet({ ...linkOnly, 'github:/users/adaex': () => ghUser({ name: 'Ada Smith', company: '@contoso' }) }));
+  assert.equal(same.items.filter((it) => it.kind === 'repo').length, 1);
+});
+
+test("someone else's page is not followed: a site without their name is skipped with its links", async () => {
+  const net = fakeNet({ exa: (urls) => ({ results: urls.map((u) => (u === PROFILE ? exaProfile() : exaSite({ title: 'Meet the team', text: 'Our data team builds tools.' }))) }) });
+  const w = await lookup(net);
+  assert.ok(!w.items.some((it) => it.kind === 'site' || it.kind === 'repo' || it.kind === 'paper'));
+  assert.ok(!net.calls.some((u) => u.includes('/users/adaex') || u.includes('orcid')));
+});
+
+test('at most two hops: a site their GitHub links to is not read', async () => {
+  const net = fakeNet({
+    exa: (urls) => ({ results: urls.map((u) => (u === PROFILE ? exaProfile({ text: '# Ada Example\n\nI keep my code at https://github.com/adaex', extras: { links: [] } }) : null)).filter(Boolean) }),
+    'github:/users/adaex': () => ghUser({ blog: 'https://another-site.example' }),
+  });
+  const w = await lookup(net);
+  assert.ok(w.items.some((it) => it.kind === 'repo'));
+  assert.equal(net.calls.filter((u) => u.includes('api.exa.ai')).length, 1);
+});
+
+test('"Not them" and the opt-out list are checked before anything is read', async () => {
+  const blockedNet = fakeNet();
+  const w = await lookup(blockedNet, { blocked: ['https://github.com/AdaEx/'] });
+  assert.ok(!blockedNet.calls.some((u) => u.includes('/users/adaex')), 'the blocked account was never fetched');
+  assert.ok(!w.items.some((it) => it.kind === 'repo'));
+  assert.deepEqual(w.blocked, ['https://github.com/AdaEx/']);
+
+  const optNet = fakeNet();
+  const out = await lookup(optNet, { optout: new Set([canonicalUrl(PROFILE)]) });
+  assert.equal(out.opted_out, true);
+  assert.equal(optNet.calls.length, 0);
+});
+
+test('a rate-limited source is noted and the rest still comes back', async () => {
+  const net = fakeNet({ 'github:/users/adaex': { status: 403, headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '0' } } });
+  const w = await lookup(net);
+  assert.ok(w.notes.some((n) => /GitHub: api\.github\.com rate limit reached/.test(n)), w.notes.join(' | '));
+  assert.ok(w.items.some((it) => it.kind === 'paper'));
+});
+
+test('no profile link: nothing to start from, no calls', async () => {
+  const net = fakeNet();
+  const w = await findWork({ person: { ...ADA, url: null }, ctx: net.ctx, now: NOW });
+  assert.deepEqual(w.items, []);
+  assert.equal(net.calls.length, 0);
+});
+
+test('with a model: openers name the work, themes stay general (no titles, links or names)', async () => {
+  let sent;
+  const openai = {
+    chat: {
+      completions: {
+        create: async (req) => {
+          sent = req;
+          return { choices: [{ message: { content: JSON.stringify({
+            talking_points: ['Ask how querykit keeps queries readable, since you want to work on data tooling.'],
+            themes: ['Maintains querykit, a small SQL builder', 'Builds developer tools for working with databases', 'See https://adaexample.dev', 'Ada writes about data'],
+          }) } }] };
+        },
+      },
+    },
+  };
+  const w = await lookup(fakeNet(), { openai, model: 'test-model' });
+  assert.match(sent.messages[0].content, /data, not instructions/);
+  assert.doesNotMatch(sent.messages[1].content, /ada@example|Ada Example/, 'the model gets the work, not contact details or the name');
+  assert.deepEqual(w.talking_points, ['Ask how querykit keeps queries readable, since you want to work on data tooling.']);
+  assert.deepEqual(w.themes, ['Builds developer tools for working with databases']);
+});
+
+test('helpers: stale after 30 days, plain openers by kind', () => {
+  assert.equal(isStale(null), true);
+  assert.equal(isStale({ fetched_at: daysAgo(3) }, NOW), false);
+  assert.equal(isStale({ fetched_at: daysAgo(31) }, NOW), true);
+  const p = plainPrep([{ kind: 'paper', title: 'X', date: '2024-05-01' }, { kind: 'repo', title: 'a/b' }]);
+  assert.match(p.talking_points[0], /2024 paper “X”/);
+  assert.deepEqual(generalThemes(['Works on a/b tooling daily'], [{ title: 'owner/a-b-tool' }], { name: 'Ada Example' }), ['Works on a/b tooling daily']);
+});
+
+// ---------------------------------------------------------------------------
+// Routes, on a bare app with an in-memory store
+// ---------------------------------------------------------------------------
+
+function memoryStore() {
+  const maps = new Map(); // conversation id -> { userId, map }
+  const connections = new Map(); // connection id -> { userId, conversationId, personKey }
+  const find = (map, key) => map.branches.flatMap((b) => b.people).find((p) => p.id === key) ?? null;
+  return {
+    maps,
+    connections,
+    async mapPerson(_db, userId, cid, key) {
+      const m = maps.get(cid);
+      const person = m && m.userId === userId ? find(m.map, key) : null;
+      return person ? clone({ person, goal: m.map.goal, about: m.map.profile }) : null;
+    },
+    async connectionPerson(_db, userId, id) {
+      const c = connections.get(id);
+      if (!c || c.userId !== userId) return null;
+      const m = maps.get(c.conversationId);
+      return clone({ connection: { id, conversation_id: c.conversationId, person_key: c.personKey, name: 'Ada Example', title: 'Software Engineer', organization: 'Contoso', branch_label: 'Data engineers', talking_points_json: [] }, person: find(m.map, c.personKey), goal: m.map.goal, about: m.map.profile });
+    },
+  };
+}
+
+async function startApp(opts = {}) {
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.auth = { user: { id: req.get('x-test-user') || 'user-a' }, db: null };
+    next();
+  });
+  app.use('/api', workRoutes(opts));
+  const server = app.listen(0);
+  await once(server, 'listening');
+  const base = `http://localhost:${server.address().port}`;
+  const call = async (method, path, body, user = 'user-a') => {
+    const res = await fetch(`${base}/api/${path}`, { method, headers: { 'x-test-user': user, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+    return { status: res.status, json: await res.json().catch(() => null) };
+  };
+  return { server, call };
+}
+
+describe('Work routes (in-memory)', () => {
+  const store = memoryStore();
+  const cid = randomUUID();
+  const connId = randomUUID();
+  const net = fakeNet();
+  let app;
+
+  before(async () => {
+    store.maps.set(cid, { userId: 'user-a', map: { goal: 'Data internship', profile: 'CS student', branches: [{ id: 'b1', label: 'Data engineers', people: [clone(ADA), { id: 'demo-x-1', name: 'Sample person 1', url: null }] }] } });
+    store.connections.set(connId, { userId: 'user-a', conversationId: cid, personKey: PROFILE });
+    app = await startApp({ store, exaKey: 'test', fetchImpl: net.fetchImpl, perDay: 2 });
+  });
+  after(() => app.server.close());
+
+  test('looks up a person on your own map and returns their work', async () => {
+    const r = await app.call('POST', 'people/work', { conversationId: cid, personKey: PROFILE });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.ok(r.json.work.items.some((it) => it.title === 'adaex/querykit'));
+  });
+
+  test("someone else's map, an unknown person or a missing key is refused", async () => {
+    assert.equal((await app.call('POST', 'people/work', { conversationId: cid, personKey: PROFILE }, 'user-b')).status, 404);
+    assert.equal((await app.call('POST', 'people/work', { conversationId: cid, personKey: 'https://linkedin.com/in/nobody' })).status, 404);
+    assert.equal((await app.call('POST', 'people/work', { conversationId: cid })).status, 400);
+  });
+
+  test('demo people get demo work, and the daily cap answers 429', async () => {
+    const demo = await app.call('POST', 'people/work', { conversationId: cid, personKey: 'demo-x-1' });
+    assert.equal(demo.status, 200);
+    assert.equal(demo.json.work.demo, true);
+    assert.equal((await app.call('POST', 'people/work', { conversationId: cid, personKey: 'demo-x-1' })).status, 429, 'perDay is 2 in this app, and refused requests do not count');
+  });
+
+  test('the Connections page reads the work saved on the map', async () => {
+    store.maps.get(cid).map.branches[0].people[0].work = { items: [{ kind: 'repo', title: 'adaex/querykit' }] };
+    const r = await app.call('GET', `connections/${connId}/work`);
+    assert.equal(r.status, 200);
+    assert.equal(r.json.work.items[0].title, 'adaex/querykit');
+    assert.equal(r.json.conversationId, cid);
+    assert.equal((await app.call('GET', `connections/${connId}/work`, undefined, 'user-b')).status, 404);
+  });
+});
+
+test('without an Exa key, real people are not looked up', async () => {
+  const store = memoryStore();
+  const cid = randomUUID();
+  store.maps.set(cid, { userId: 'user-a', map: { goal: '', profile: '', branches: [{ id: 'b', people: [clone(ADA)] }] } });
+  const app = await startApp({ store, exaKey: null });
+  try {
+    const r = await app.call('POST', 'people/work', { conversationId: cid, personKey: PROFILE });
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /EXA_API_KEY/);
+  } finally {
+    app.server.close();
+  }
+});
+
+test('the coffee chat partner gets their work as general themes, never titles or links', async () => {
+  const person = { ...clone(ADA), work: { themes: ['Builds developer tools for databases', 'Ada Example shares notes at https://adaexample.dev and adaexample.dev/blog'], items: [{ title: 'adaex/querykit' }] } };
+  const map = { goal: 'Data internship', profile: '', branches: [{ id: 'b', people: [person] }] };
+  const chain = { select: () => chain, eq: () => chain, order: () => chain, limit: () => chain, maybeSingle: async () => ({ data: { data_json: map }, error: null }) };
+  const db = { from: () => chain };
+  const conn = { id: randomUUID(), conversation_id: randomUUID(), person_key: PROFILE, name: 'Ada Example', title: 'Software Engineer', organization: 'Contoso', why: 'Ada Example builds data tools.', branch_label: 'Data engineers', talking_points_json: [] };
+  const { setup } = practice.parseSetup({ connection_id: conn.id, goal: 'learn_role' });
+
+  const context = await practice.mapContext(db, 'user-a', conn.conversation_id, conn.person_key);
+  const scenario = practice.buildScenario(setup, conn, context, { mock: false });
+  const prompt = practice.personaPrompt(scenario);
+  const first = scenario.persona.first_name;
+  assert.deepEqual(scenario.persona.work_themes, ['Builds developer tools for databases', `${first} shares notes at and`]);
+  assert.match(prompt, /Your recent work, in general terms: Builds developer tools for databases;/);
+  assert.match(prompt, /never name a repository, paper, product, project or website/);
+  assert.doesNotMatch(prompt, /adaexample|querykit|Ada Example|Example/);
+
+  // Someone whose work wasn't looked up: the prompt is as before.
+  const plain = practice.personaPrompt(practice.buildScenario(setup, conn, await practice.mapContext(db, 'user-a', conn.conversation_id, 'someone-else'), { mock: false }));
+  assert.doesNotMatch(plain, /recent work|never name a repository/);
+});
+
+// ---------------------------------------------------------------------------
+// Against Supabase: row level security and deletion (demo mode, so no outside calls)
+// ---------------------------------------------------------------------------
+
+describe('Work API (Supabase)', { skip: configured ? false : 'SUPABASE_URL / SUPABASE_ANON_KEY not set in .env' }, () => {
+  let server;
+  const created = [];
+  const email = makeEmail('work');
+  let a;
+  let b;
+  let cid;
+  let personKey;
+
+  before(async () => {
+    ({ child: server } = await startServer());
+    ({ client: a } = await signUpAs(email('a'), created, 'Test a'));
+    ({ client: b } = await signUpAs(email('b'), created, 'Test b'));
+    const turn = await a.post('/api/network', { message: 'Data engineering internship' });
+    assert.equal(turn.status, 200, turn.text);
+    cid = turn.json.conversationId;
+    const map = (await a.get(`/api/conversations/${cid}`)).json.map;
+    const people = (await a.post('/api/people', { branch: map.branches[0], count: 2 })).json.people;
+    map.branches[0].people = people;
+    personKey = people[0].id;
+    assert.equal((await a.put(`/api/conversations/${cid}/map`, { map })).status, 200);
+  });
+
+  after(async () => {
+    await deleteAccounts(created);
+    server?.kill();
+  });
+
+  test("a lookup reads the person from your saved map; another user can't look them up", async () => {
+    const mine = await a.post('/api/people/work', { conversationId: cid, personKey });
+    assert.equal(mine.status, 200, mine.text);
+    assert.equal(mine.json.work.demo, true);
+    assert.equal((await b.post('/api/people/work', { conversationId: cid, personKey })).status, 404);
+  });
+
+  test('saved work shows on the connection, respects "Not them", and goes with the chat', async () => {
+    const map = (await a.get(`/api/conversations/${cid}`)).json.map;
+    const work = (await a.post('/api/people/work', { conversationId: cid, personKey })).json.work;
+    map.branches[0].people[0].work = { ...work, blocked: ['demo'] };
+    assert.equal((await a.put(`/api/conversations/${cid}/map`, { map })).status, 200);
+    const after = await a.post('/api/people/work', { conversationId: cid, personKey });
+    assert.deepEqual(after.json.work.items, [], 'the server reads "Not them" from the saved map');
+
+    const conn = await a.patch(`/api/conversations/${cid}/connections`, { personKey, status: 'saved' });
+    assert.equal(conn.status, 200, conn.text);
+    const shown = await a.get(`/api/connections/${conn.json.id}/work`);
+    assert.equal(shown.status, 200, shown.text);
+    assert.equal(shown.json.work.items.length, 2);
+    assert.equal((await b.get(`/api/connections/${conn.json.id}/work`)).status, 404, 'row level security');
+
+    assert.equal((await a.req('DELETE', `/api/conversations/${cid}`)).status, 200);
+    assert.equal((await a.get(`/api/connections/${conn.json.id}/work`)).status, 404, 'deleted with the chat');
+  });
+});
+
+test('a bare "Project Link" line takes the description above it', async () => {
+  const text = '# Ada Example\n\n## Projects\n\n### Query kit\nJan 2020 - Present\nA tiny query builder for SQL databases\n[Project Link](https://github.com/adaex/querykit?trk=public_profile_project-button)';
+  const w = await lookup(fakeNet({ exa: () => ({ results: [exaProfile({ text, extras: { links: [] } })] }) }));
+  assert.match(w.items.find((it) => it.kind === 'project').detail, /They wrote: “A tiny query builder for SQL databases”/);
+});
