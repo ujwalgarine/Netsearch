@@ -10,7 +10,7 @@ import { canonicalUrl, githubLogin, githubRepo, orcidId, maybeOwnSite, nameVerdi
 import { parseFeed } from '../lib/sources/feeds.js';
 import { speakerName } from '../lib/sources/talks.js';
 import { createFetcher } from '../lib/sources/http.js';
-import { findWork, generalThemes, isStale, plainPrep } from '../lib/enrich.js';
+import { findWork, generalThemes, isStale, nameParts, plainPrep } from '../lib/enrich.js';
 import { workRoutes } from '../lib/work.js';
 import * as practice from '../lib/practice.js';
 import { Client, configured, makeEmail, signUp as signUpAs, deleteAccounts, startServer } from './helpers.js';
@@ -274,12 +274,85 @@ test('two or more of their own project links under one account make that account
   assert.match(w.accounts.find((a) => a.kind === 'github').via, /Their projects on their LinkedIn profile are on this account/);
 });
 
-test('a namesake with no link is never looked up', async () => {
-  const net = fakeNet({ exa: () => ({ results: [exaProfile({ text: '# Ada Example\n\nEngineer', extras: { links: [] } })] }) });
+// Name searches: GitHub (search/users) and ORCID (expanded-search), in the real response shapes.
+const searchHits = (...users) => ({ 'github:/search/users': () => ({ total_count: users.length, incomplete_results: false, items: users.map((u) => (typeof u === 'string' ? { login: u, type: 'User', html_url: `https://github.com/${u}` } : u)) }) });
+const orcidHits = (...rows) => ({ 'orcid:expanded-search': () => ({ 'expanded-result': rows.map(([id, given, family, inst]) => ({ 'orcid-id': id, 'given-names': given, 'family-names': family, 'credit-name': null, 'other-name': [], email: [], 'institution-name': inst })), 'num-found': rows.length }) });
+const noLinks = { exa: () => ({ results: [exaProfile({ text: '# Ada Example\n\nSoftware Engineer at Contoso', extras: { links: [] } })] }) };
+const githubUser = (login, over = {}) => ({
+  [`github:/users/${login}`]: () => ghUser({ login, html_url: `https://github.com/${login}`, blog: '', ...over }),
+  [`github:/users/${login}/repos`]: () => ghRepos().map((r) => ({ ...r, full_name: r.full_name.replace('adaex/', `${login}/`), html_url: r.html_url.replace('/adaex/', `/${login}/`) })),
+  [`github:/users/${login}/social_accounts`]: () => [],
+});
+
+test('with nothing linked, a name search runs, and a bare name match is neither kept nor noted', async () => {
+  const net = fakeNet({ ...indexOnly([]), ...searchHits('adaex'), ...githubUser('adaex', { company: '' }) });
   const w = await lookup(net);
   assert.deepEqual(w.items, []);
-  assert.ok(net.calls.every((u) => u.startsWith('https://api.exa.ai/')), 'no account was looked up');
-  assert.equal(net.calls.filter((u) => u.endsWith('/contents')).length, 1, 'only the profile itself was read (plus a search of speaker pages)');
+  assert.deepEqual(w.skipped, [], 'a namesake found by searching is not stored, not even as left out');
+  assert.match(decodeURIComponent(net.calls.find((u) => u.includes('/search/users'))), /fullname:"Ada Example" type:user/);
+  assert.match(decodeURIComponent(net.calls.find((u) => u.includes('/expanded-search/'))), /given-names:"Ada" AND family-name:"Example"/);
+  assert.equal(net.calls.filter((u) => u.endsWith('/contents')).length, 1, 'only the profile itself was read');
+});
+
+test('searching their name on GitHub: an account that links back to them is kept, a namesake is not', async () => {
+  const net = fakeNet({
+    ...noLinks,
+    ...searchHits('ada-other', { login: 'contoso', type: 'Organization' }, 'adaex'),
+    ...githubUser('ada-other', { company: '@fabrikam' }),
+  });
+  const w = await lookup(net);
+  const gh = w.accounts.find((a) => a.kind === 'github');
+  assert.equal(gh.url, 'https://github.com/adaex');
+  assert.equal(gh.via, 'Found by searching their name, and it links back to them');
+  assert.equal(gh.confirmed, true);
+  assert.ok(w.items.some((it) => it.kind === 'repo' && it.title === 'adaex/querykit'));
+  assert.ok(!net.calls.some((u) => u.includes('/users/contoso')), 'organizations are not people');
+  assert.doesNotMatch(JSON.stringify(w), /ada-other/, "the namesake's account is not kept anywhere");
+});
+
+test('searching their name on GitHub: name plus employer counts only when one result matches that way', async () => {
+  const both = await lookup(fakeNet({ ...noLinks, ...searchHits('ada-one', 'ada-two'), ...githubUser('ada-one', { company: '@contoso' }), ...githubUser('ada-two', { company: '@contoso' }) }));
+  assert.deepEqual(both.items, [], "two people with that name at Contoso: we can't tell which");
+  assert.deepEqual(both.skipped, []);
+
+  const one = await lookup(fakeNet({ ...noLinks, ...searchHits('ada-one', 'ada-two'), ...githubUser('ada-one', { company: '@fabrikam' }), ...githubUser('ada-two', { company: '@contoso' }) }));
+  assert.deepEqual(one.accounts.map((a) => [a.url, a.via, a.confirmed]), [['https://github.com/ada-two', 'Found by searching their name; its name and an employer or school match their profile', false]]);
+  assert.ok(one.items.some((it) => it.title === 'ada-two/querykit'));
+});
+
+test('a GitHub they linked is never searched for', async () => {
+  const net = fakeNet({ exa: () => ({ results: [exaProfile({ text: '# Ada Example\n\nI keep my code at https://github.com/adaex', extras: { links: [] } })] }) });
+  await lookup(net);
+  assert.ok(!net.calls.some((u) => u.includes('/search/users')));
+  assert.ok(net.calls.some((u) => u.includes('/expanded-search/')), 'they linked no ORCID, so that one is searched');
+});
+
+test('searching their name on ORCID: the one record that shares a school is kept; two such records are not', async () => {
+  const OTHER = '0000-0001-5000-0007';
+  const person = { ...ADA, education: [{ school: 'Example University', degree: 'MS' }] };
+  const net = fakeNet({ ...noLinks, ...orcidHits(['0000-0002-1825-0097', 'Ada', 'Example', ['Example University']], [OTHER, 'Ada', 'Example', ['Fabrikam Institute of Technology']]) });
+  const w = await lookup(net, { person });
+  assert.equal(w.accounts.find((a) => a.kind === 'orcid')?.via, 'Found by searching their name; its name and an employer or school match their profile');
+  assert.ok(w.items.some((it) => it.kind === 'paper' && it.source === 'OpenAlex'));
+  assert.ok(w.items.some((it) => it.kind === 'role'));
+  assert.ok(!net.calls.some((u) => u.includes(OTHER)), 'a namesake at another school is never read');
+
+  const twins = fakeNet({ ...noLinks, ...orcidHits(['0000-0002-1825-0097', 'Ada', 'Example', ['Example University']], [OTHER, 'Ada', 'Example', ['Example University']]), [`orcid:${OTHER}`]: () => orcid() });
+  const t = await lookup(twins, { person });
+  assert.ok(!t.accounts.some((a) => a.kind === 'orcid'), "two records with that name and school: we can't tell which");
+  assert.deepEqual(t.skipped, []);
+  assert.ok(!twins.calls.some((u) => u.includes('openalex')), 'records that can only count by linking back skip OpenAlex');
+});
+
+test('searching their name on ORCID: a record with no shared school counts only if it links back', async () => {
+  const back = () => ({ ...orcid(), person: { ...orcid().person, 'researcher-urls': { 'researcher-url': [{ url: { value: 'https://www.linkedin.com/in/ada-example' } }] } } });
+  const w = await lookup(fakeNet({ ...noLinks, ...orcidHits(['0000-0002-1825-0097', 'Ada', 'Example', []]), 'orcid:0000-0002-1825-0097': back }));
+  const rec = w.accounts.find((a) => a.kind === 'orcid');
+  assert.equal(rec?.via, 'Found by searching their name, and it links back to them');
+  assert.ok(w.items.filter((it) => it.kind === 'paper').every((it) => it.source === 'ORCID'));
+
+  const none = await lookup(fakeNet({ ...noLinks, ...orcidHits(['0000-0002-1825-0097', 'Ada', 'Example', []]) }));
+  assert.ok(!none.accounts.some((a) => a.kind === 'orcid'), 'its own website is not one we tied to them');
 });
 
 test('a linked account whose name contradicts the profile is dropped', async () => {
@@ -306,7 +379,7 @@ test("someone else's page is not followed: a site without their name is skipped 
   const net = fakeNet({ exa: (urls) => ({ results: urls.map((u) => (u === PROFILE ? exaProfile() : exaSite({ title: 'Meet the team', text: 'Our data team builds tools.' }))) }) });
   const w = await lookup(net);
   assert.ok(!w.items.some((it) => it.kind === 'site' || it.kind === 'repo' || it.kind === 'paper'));
-  assert.ok(!net.calls.some((u) => u.includes('/users/adaex') || u.includes('orcid')));
+  assert.ok(!net.calls.some((u) => u.includes('/users/adaex') || u.includes('0000-0002-1825-0097')));
 });
 
 test('at most two hops: a site their GitHub links to is not read', async () => {
@@ -366,6 +439,17 @@ test('with a model: openers name the work, themes stay general (no titles, links
   assert.doesNotMatch(sent.messages[1].content, /ada@example|Ada Example/, 'the model gets the work, not contact details or the name');
   assert.deepEqual(w.talking_points, ['Ask how querykit keeps queries readable, since you want to work on data tooling.']);
   assert.deepEqual(w.themes, ['Builds developer tools for working with databases']);
+});
+
+test('names for a search: first and last, without titles, credentials or pronouns', () => {
+  assert.deepEqual(nameParts('Kyle Lo'), ['Kyle', 'Lo']);
+  assert.deepEqual(nameParts('Dr. Jane Q. Smith, PhD'), ['Jane', 'Smith']);
+  assert.deepEqual(nameParts("Mary O'Brien (she/her)"), ['Mary', "O'Brien"]);
+  assert.deepEqual(nameParts('José García-López 🚀'), ['José', 'García-López']);
+  assert.deepEqual(nameParts('Li Xu | Speaker'), ['Li', 'Xu']);
+  assert.equal(nameParts('Madonna'), null);
+  assert.equal(nameParts('A. B.'), null);
+  assert.deepEqual(nameParts('Ada "Byron" Example'), ['Ada', 'Example'], 'quotes never reach a search query');
 });
 
 test('helpers: stale after 30 days, plain openers by kind', () => {
@@ -562,7 +646,8 @@ test('writing, answers and talks come only from accounts tied to them, each sayi
   assert.equal(notist.via, 'Linked on their GitHub');
   const sessionize = talks.filter((t) => t.source === 'Sessionize');
   assert.ok(sessionize.length >= 1, 'the Sessionize profile found by name links back to their LinkedIn');
-  assert.equal(sessionize[0].via, 'Suggested by the search index, and it links back to them');
+  assert.equal(sessionize[0].via, 'Found by searching their name, and it links back to them');
+  assert.ok(!net.calls.some((u) => u.includes('/search/users')), 'they linked their GitHub, so it is not searched for');
   assert.ok(!talks.some((t) => t.url.includes('ada-example-2')), 'at most two speaker pages, and the ones tied to them come first');
 
   assert.ok(w.items.length <= 12);
@@ -575,7 +660,7 @@ test('a speaker page found by their name is kept only when it links back to them
   const w = await lookup(net);
   const talks = w.items.filter((it) => it.kind === 'talk');
   assert.deepEqual(talks.map((t) => [t.title, t.source]), [['Boring query builders', 'Sessionize'], ['Indexes in practice', 'Sessionize']]);
-  assert.ok(w.skipped.some((x) => x.url === 'https://speakerdeck.com/ada-example-2'), "the namesake's page names another employer and doesn't link to them");
+  assert.doesNotMatch(JSON.stringify(w), /ada-example-2/, "the namesake's page names another employer and doesn't link to them, and isn't kept anywhere");
   assert.ok(net.calls.some((u) => u === 'https://api.exa.ai/search'));
 });
 

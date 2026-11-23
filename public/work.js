@@ -124,7 +124,7 @@ function workPanelContent(branchId, p) {
   }
   if (w.demo) out.push(el('p', 'work-note', 'Demo data. With EXA_API_KEY set, this shows their real work.'));
   if (w.items?.length) out.push(workList(w, { onNotThem: (item) => notThem(branchId, p.id, item) }));
-  else out.push(el('p', 'why', 'Nothing public found from accounts they linked.'));
+  else out.push(el('p', 'why', "No public work found that we could tie to their profile."));
   if (w.skipped?.length) {
     out.push(el('p', 'work-note', `Left out ${w.skipped.length === 1 ? 'a linked account' : `${w.skipped.length} linked accounts`} that didn't look like them.`));
   }
