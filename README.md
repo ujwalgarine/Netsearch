@@ -60,6 +60,18 @@ Open **Practice** in the sidebar, or press **Practice coffee chat** on any saved
 - **History:** every session is listed under Practice, with its transcript and report. **Insights** charts your score over time once you've finished two.
 - Without an OpenAI key, the persona rotates through 6 demo lines and the feedback is a deterministic demo report, both labelled **Demo**.
 
+## Work and projects
+
+Open a person on the map and their panel gets a **Work** tab: their own public work (projects, repos, papers, current research roles, their own website and its blog posts, posts on DEV, Medium or Substack, their top Stack Overflow answers and their conference talks), each with a link, a date, where it came from, and how we know it is theirs. The **Prep** tab adds up to two openers written from that work, and the practice partner hears about it in general terms only. It is looked up in the background about a second after the panel opens, kept on the map with the person, and checked again after 30 days or when you press **Check again**. Tracked people show it on the **Connections** page too.
+
+- **Only accounts tied to the person.** It starts from the profile already on your map (read through Exa) and follows at most two hops, for example profile, then their website or GitHub, then the DEV, Stack Overflow or speaker page listed there. An account counts when the person linked it in their own words (their profile text, their own site, or a GitHub or ORCID account already tied to them). Exa also suggests accounts its index matched to the name; those only count when they link back to the person, or carry their full name plus an employer or school from the profile. When their profile and site link no GitHub or ORCID, those two are searched by their name, and speaker pages (Sessionize, Speaker Deck, Notist) always are. A search result is kept only when it links back to them, or when it is the one result whose name and an employer or school match the profile; two such results mean we can't tell, so neither is kept. Results that don't count are not stored at all, not even as "left out", since they are most likely other people. A matching name alone never counts, a site needs their name on it, and an account whose own name contradicts the profile is dropped and noted.
+- **Not them.** Every item has a **Not them** button. It removes everything from that account, never adds it for that person again, rebuilds the openers without it, and can be undone.
+- **Opt-out.** `data/optout.json` lists profile or account URLs of people who asked not to have their work collected. Every user's lookups skip them. Restart the server after editing it.
+- **Sources.** Exa contents (the profile and their site, with the links on each page), GitHub REST (profile, recent own repos, the links they listed), the ORCID public API (their record: jobs, schools, works, websites), OpenAlex (their latest papers, by ORCID iD), the DEV API (profile and recent articles), Medium and Substack RSS feeds (titles, dates and tags only, never the post bodies), the Stack Exchange API (their highest-voted answers) and speaker pages read through Exa. Social media posts (LinkedIn, X, Instagram and the like) are never read: a social link only serves as proof an account is theirs. No people-search or data-broker services, no username or email hunting, no LinkedIn scraping.
+- **Work only.** Emails, phone numbers and street addresses are stripped before anything is kept or sent to the model. Facts about their employer are never attached to the person.
+- **Cost and limits.** About 6 to 15 API calls per person, mostly free, plus up to 9 more when GitHub and ORCID are searched by name. Exa charges per page read (a profile, up to two sites with a few of their posts, and up to two speaker pages) plus one search of speaker sites. One small OpenAI call writes the openers. Each user gets `WORK_LOOKUPS_PER_DAY` lookups a day (default 60). Without keys, GitHub allows 60 calls an hour per server and OpenAlex shares a small daily budget per IP, so set the optional free `GITHUB_TOKEN` (no scopes needed; a name search reads up to two accounts at 3 calls each) and `OPENALEX_API_KEY` (openalex.org/settings/api) for real use. Stack Exchange allows 300 calls a day per server without a key; a free `STACKEXCHANGE_KEY` (stackapps.com) raises that to 10,000. ORCID, DEV, Medium and Substack need no key.
+- **Demo mode.** Demo people get placeholder work so the panel can be tried without keys.
+
 ## How it works
 
 ```
@@ -80,6 +92,11 @@ mock.js             demo data used when no OpenAI key is set
 lib/auth.js          sign up / sign in / sessions (Supabase Auth, HttpOnly cookies)
 lib/store.js         saved chats, map versions and connections
 lib/practice.js      practice sessions: persona / coach / report prompts, demo mode, report schema + quote check
+lib/enrich.js        Work and projects: one person's own public work, from accounts tied to their profile
+lib/work.js          its routes: /api/people/work and /api/connections/:id/work
+lib/sources/         readers for Exa, GitHub, ORCID, OpenAlex, DEV, Medium/Substack feeds, Stack Overflow and speaker pages; link and name rules; the shared HTTP cache
+data/optout.json     people who asked not to have their work collected
+public/work.js       the Work tab, Not them, and the openers from their work
 supabase/schema.sql  database tables + row level security (run once in Supabase)
 .env                your API keys, model, and port (never commit this)
 ```
@@ -97,3 +114,11 @@ To change the model, edit `OPENAI_MODEL` in `.env`. The planner prompt lives in 
 - Profiles can be out of date. Check the linked profile before reaching out.
 - Most links go to LinkedIn, but some go to personal sites or other profile pages; the button says which.
 - Practice POSTs share the per-user AI limit with tips: 20 requests per 10 minutes. A long (20-turn) practice chat plus its start and feedback needs 22, so a very fast long chat can hit the limit.
+
+## Limits of Work and projects
+
+- Many profiles link nothing. For those, GitHub and ORCID are searched by name, but a result needs a back-link, or to be the one result with their name and an employer or school from the profile, so people whose accounts don't name their employer or school still show no work. A name match alone is never used.
+- Exa's index sometimes attaches a namesake's account to a profile (seen live with an ORCID record). Those suggestions are only kept when they link back or share an employer or school, so some real accounts are left out too, for example when the profile says "Ai2" and the ORCID record says "Allen Institute for Artificial Intelligence".
+- GitHub's user API could not be reached from the cloud test container, so GitHub accounts were checked against saved sample answers only. GitHub's user search, ORCID's search, Exa, ORCID, OpenAlex and OpenAI were checked live.
+- DEV, Medium, Substack and Stack Overflow could not be reached from the test container either. Their tests use the real response formats (fetched from the live DEV API and feeds; Stack Overflow from its documentation), but not live calls. Speaker pages are read through Exa, whose page titles and subpages for Sessionize, Speaker Deck and Notist were not checked live, so some talks may show a title made from the page address.
+- Substack feeds often don't name the author, so a Substack is only used when the person linked it themselves.

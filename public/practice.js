@@ -508,7 +508,9 @@ function renderReport(s, report) {
 
   if (!report) {
     const empty = el('div', 'page-empty');
-    empty.append(el('p', null, 'This chat ended before you said anything, so there is no feedback.'));
+    empty.append(el('p', null, s.earlier_version
+      ? "This chat was scored by an earlier version of Practice, so its feedback can't be shown here."
+      : 'This chat ended before you said anything, so there is no feedback.'));
     root.append(empty);
   } else {
     root.append(reportHero(s, report), rubricCard(report), listsCard(report));

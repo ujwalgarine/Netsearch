@@ -12,6 +12,8 @@ import { createAuth, sameOriginOnly } from './lib/auth.js';
 import * as store from './lib/store.js';
 import * as insights from './lib/insights.js';
 import * as practice from './lib/practice.js';
+import { loadOptout } from './lib/enrich.js';
+import { workRoutes } from './lib/work.js';
 import rateLimit from 'express-rate-limit';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -271,7 +273,8 @@ app.get('/api/practice/:id', wrap(async (req, res) => {
     talking_points: s.scenario_json?.talking_points ?? [],
     turns_used: messages.filter((m) => m.role === 'user').length,
     messages,
-    report: s.feedback_json ?? null,
+    report: practice.savedReport(s.feedback_json),
+    earlier_version: Boolean(s.feedback_json) && !practice.savedReport(s.feedback_json),
   });
 }));
 
@@ -281,7 +284,7 @@ app.post('/api/practice', llmLimiter, wrap(async (req, res) => {
   if (error) return res.status(400).json({ error });
   const conn = await practice.getConnection(db, user.id, setup.connection_id);
   if (!conn) return notFound(res);
-  const context = await practice.mapContext(db, user.id, conn.conversation_id);
+  const context = await practice.mapContext(db, user.id, conn.conversation_id, conn.person_key);
   const scenario = practice.buildScenario(setup, conn, context, { mock: !openai });
 
   let opening;
@@ -369,6 +372,22 @@ app.post('/api/practice/:id/end', llmLimiter, wrap(async (req, res) => {
   // Lost a race with another /end: serve the report that was stored first.
   s = done ?? (await practice.getSession(db, user.id, s.id));
   reply(s);
+}));
+
+// ---------------------------------------------------------------------------
+// Work and projects: one person's own public work, from accounts they linked (lib/work.js)
+// ---------------------------------------------------------------------------
+
+app.use('/api', workRoutes({
+  openai,
+  model: MODEL,
+  exaKey: hasExa ? exaKey : null,
+  githubToken: process.env.GITHUB_TOKEN?.trim() || null,
+  openalexKey: process.env.OPENALEX_API_KEY?.trim() || null,
+  stackKey: process.env.STACKEXCHANGE_KEY?.trim() || null,
+  optout: loadOptout(path.join(__dirname, 'data', 'optout.json')),
+  perDay: Number(process.env.WORK_LOOKUPS_PER_DAY) || 60,
+  sendError,
 }));
 
 // ---------------------------------------------------------------------------

@@ -390,10 +390,11 @@ function drawTrend(box, data, when) {
   const innerW = width - m.left - m.right;
   const innerH = height - m.top - m.bottom;
   const x = d3.scalePoint().domain(data.map((_d, i) => i)).range([0, innerW]).padding(0.4);
-  const y = d3.scaleLinear().domain([0, 10]).range([innerH, 0]);
+  // Clamped, so a score off the 0-10 scale can never draw outside the card.
+  const y = d3.scaleLinear().domain([0, 10]).range([innerH, 0]).clamp(true);
   const first = data[0].score;
   const last = data[data.length - 1].score;
-  const change = last - first;
+  const change = Math.round((last - first) * 10) / 10;
 
   const svg = d3
     .select(box)
