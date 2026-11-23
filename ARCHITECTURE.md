@@ -16,9 +16,9 @@ lib/auth.js            Supabase auth: session cookies, refresh, page/API guards,
 lib/store.js           Data access: conversations, messages, map versions, connections (list, filters, status/notes/follow-up), all filtered by user_id
 lib/practice.js        Practice sessions: data access, persona / coach / report prompts, demo mode, report schema, validator and verbatim-quote check
 lib/insights.js        Insights summary (KPIs, funnel, mix, 12-week activity, follow-ups) and networking tips (summary → hash → tips_cache)
-lib/enrich.js          Work and projects: findWork (profile -> their site -> GitHub/ORCID, at most two hops), the trust rules, openers and general themes
+lib/enrich.js          Work and projects: findWork (profile -> their site, GitHub or ORCID -> DEV, Medium, Substack, Stack Overflow or speaker pages; at most two hops), the trust rules, openers and general themes
 lib/work.js            /api/people/work (look up a person on your saved map, daily cap) and /api/connections/:id/work (read it back)
-lib/sources/           http.js (cache, per-host queue, rate-limit cooldowns), links.js (contact scrubbing, URL, name and organization rules), exa.js, github.js, orcid.js, openalex.js
+lib/sources/           http.js (cache, per-host queue, rate-limit cooldowns), links.js (contact scrubbing, URL, account, name and organization rules), exa.js (contents with subpages, site-limited search), github.js, orcid.js, openalex.js, devto.js, feeds.js (RSS/Atom for Medium and Substack), stackoverflow.js, talks.js (Sessionize, Speaker Deck, Notist)
 data/optout.json       Profile or account URLs every lookup skips (people who asked to be left out)
 people.js              Exa people search + the model writing each person's summary and talking points
 mock.js                Demo plan/people when there's no OpenAI key
@@ -193,4 +193,6 @@ What the tests do:
 ## Work and projects
 
 `POST /api/people/work { conversationId, personKey }` reads the person from the latest saved map (never from the request body), so only people on the user's own maps are looked up, and returns `{ work }`. The browser stores it on the person (`person.work`) and saves the map as usual, so it is deleted with the map, the chat or the account, and needs no table of its own. `person.work` holds `fetched_at`, `items` (kind, title, url, date, detail, source, via, account), `accounts`, `talking_points`, `themes` (general terms, for the practice partner), `blocked` ("Not them" URLs, read by the server on the next lookup), `skipped` and `notes`. `GET /api/connections/:id/work` reads it back for the Connections page. Lookups are capped per user per day (`WORK_LOOKUPS_PER_DAY`, default 60; refused requests do not count). Practice's `mapContext` also reads the connection's person from the map, so `buildScenario` gives the partner up to three `work.themes` (links, domains and the real name removed), and `personaPrompt` adds an instruction never to name a repository, paper, product, project or website. People without looked-up work get the prompt as before.
+
+Item kinds are `repo`, `project`, `paper`, `role`, `site`, `post` (their site's subpages, DEV, Medium, Substack), `answer` (Stack Overflow) and `talk`. Accounts are only read from links tied to the person (`hop` 1: the profile, or what Exa matched to it; `hop` 2: their site, or a GitHub or ORCID account kept at hop 1). Speaker pages are also searched by name (`exaSearch` on the three speaker sites) and go through the same `verify` as any suggested account. At most 12 items are kept, newest first, with the newest of each kind always kept (`pick`).
 

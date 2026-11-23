@@ -383,6 +383,7 @@ app.use('/api', workRoutes({
   exaKey: hasExa ? exaKey : null,
   githubToken: process.env.GITHUB_TOKEN?.trim() || null,
   openalexKey: process.env.OPENALEX_API_KEY?.trim() || null,
+  stackKey: process.env.STACKEXCHANGE_KEY?.trim() || null,
   optout: loadOptout(path.join(__dirname, 'data', 'optout.json')),
   perDay: Number(process.env.WORK_LOOKUPS_PER_DAY) || 60,
   sendError,

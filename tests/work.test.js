@@ -6,7 +6,9 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import express from 'express';
-import { canonicalUrl, githubLogin, githubRepo, orcidId, maybeOwnSite, nameVerdict, companyVerdict, mentionsName, scrubContact } from '../lib/sources/links.js';
+import { canonicalUrl, githubLogin, githubRepo, orcidId, maybeOwnSite, nameVerdict, companyVerdict, mentionsName, scrubContact, writingAccount, stackOverflowUser, talkPage } from '../lib/sources/links.js';
+import { parseFeed } from '../lib/sources/feeds.js';
+import { speakerName } from '../lib/sources/talks.js';
 import { createFetcher } from '../lib/sources/http.js';
 import { findWork, generalThemes, isStale, plainPrep } from '../lib/enrich.js';
 import { workRoutes } from '../lib/work.js';
@@ -81,11 +83,43 @@ const alex = () => ({
   results: [{ id: 'https://openalex.org/W1', display_name: 'Measuring query latency', publication_date: '2025-03-01', cited_by_count: 7, doi: 'https://doi.org/10.5555/12345680', primary_location: { source: { display_name: 'Journal of Data' } }, type: 'article' }],
 });
 
+// DEV (dev.to/api): the real field names and formats, from a live response.
+const devUser = (over = {}) => ({ type_of: 'user', id: 1, username: 'adaex', name: 'Ada Example', twitter_username: null, github_username: 'adaex', summary: 'Data tools. Write me at ada@example.com', location: 'Seattle', website_url: 'https://adaexample.dev', joined_at: 'Dec 27, 2015', profile_image: 'https://media.dev.to/a.png', ...over });
+const devArticle = (over = {}) => ({
+  type_of: 'article', id: 5049015, title: 'Why query builders should be boring', description: 'Notes from two years of maintaining querykit, and why fewer features...', readable_publish_date: 'Nov 16', slug: 'why-query-builders-should-be-boring-1abc', path: '/adaex/why-query-builders-should-be-boring-1abc', url: 'https://dev.to/adaex/why-query-builders-should-be-boring-1abc', comments_count: 13, public_reactions_count: 79, positive_reactions_count: 79, collection_id: null, published_timestamp: '2026-11-16T15:30:03Z', created_at: '2026-11-16T15:30:03Z', published_at: '2026-11-16T15:30:03Z', edited_at: null, reading_time_minutes: 4, tag_list: ['sql', 'typescript', 'opensource'], tags: 'sql, typescript, opensource',
+  user: { name: 'Ada Example', username: 'adaex', twitter_username: null, github_username: 'adaex', user_id: 1, website_url: 'https://adaexample.dev', profile_image: '', profile_image_90: '' },
+  ...over,
+});
+const devArticles = () => [devArticle(), devArticle({ id: 2, title: 'Our team newsletter', url: 'https://dev.to/contoso/our-team-newsletter-2', user: { name: 'Contoso', username: 'contoso' } })];
+
+// Medium and Substack feeds: the real structure (RSS 2.0, CDATA, RFC 822 dates), from live feeds.
+const mediumFeed = () => `<?xml version="1.0" encoding="UTF-8"?><rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0" xmlns:cc="http://cyber.law.harvard.edu/rss/creativeCommonsRssModule.html"><channel><title><![CDATA[Stories by Ada Example on Medium]]></title><description><![CDATA[Stories by Ada Example on Medium]]></description><link>https://medium.com/@adaex?source=rss-268314bb7e7e------2</link><image><url>https://cdn-images-1.medium.com/fit/c/150/150/a.png</url><title>Stories by Ada Example on Medium</title><link>https://medium.com/@adaex?source=rss-268314bb7e7e------2</link></image><generator>Medium</generator><lastBuildDate>Fri, 16 Oct 2026 20:46:56 GMT</lastBuildDate><atom:link href="https://medium.com/@adaex/feed" rel="self" type="application/rss+xml"/><webMaster><![CDATA[yourfriends@medium.com]]></webMaster><atom:link href="http://medium.superfeedr.com" rel="hub"/><item><title><![CDATA[Indexes I wish I’d added sooner]]></title><link>https://medium.com/@adaex/indexes-i-wish-id-added-sooner-0126fa5c6ce8?source=rss-268314bb7e7e------2</link><guid isPermaLink="false">https://medium.com/p/0126fa5c6ce8</guid><category><![CDATA[postgres]]></category><category><![CDATA[databases]]></category><dc:creator><![CDATA[Ada Example]]></dc:creator><pubDate>Thu, 12 Dec 2024 17:11:33 GMT</pubDate><atom:updated>2025-05-19T19:09:35.029Z</atom:updated><content:encoded><![CDATA[<p>Call me: 206-555-0142. <a href="mailto:ada@example.com">mail</a></p>]]></content:encoded></item></channel></rss>`;
+const substackFeed = () => `<?xml version="1.0" encoding="UTF-8"?><rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:googleplay="http://www.google.com/schemas/play-podcasts/1.0"><channel><title><![CDATA[Small Data Notes]]></title><description><![CDATA[Notes on small data tools]]></description><link>https://adanotes.substack.com</link><generator>Substack</generator><lastBuildDate>Tue, 03 Nov 2026 04:35:04 GMT</lastBuildDate><language><![CDATA[en]]></language><item><title><![CDATA[Picking a database for a side project]]></title><description><![CDATA[What I check first, and what I ignore]]></description><link>https://adanotes.substack.com/p/picking-a-database</link><guid isPermaLink="false">https://adanotes.substack.com/p/picking-a-database</guid><pubDate>Fri, 30 Oct 2026 17:03:17 GMT</pubDate><enclosure url="https://substack-post-media.s3.amazonaws.com/public/images/a.png" length="0" type="image/jpeg"/><content:encoded><![CDATA[<p>...</p>]]></content:encoded></item></channel></rss>`;
+
+// Stack Exchange API 2.3 (shapes from its documentation: items, quota fields, unix dates, HTML entities).
+const seUser = (over = {}) => ({ items: [{ badge_counts: { bronze: 12, silver: 5, gold: 1 }, account_id: 99, is_employee: false, creation_date: 1400000000, user_type: 'registered', user_id: 4242, location: 'Seattle, WA', website_url: 'https://adaexample.dev', link: 'https://stackoverflow.com/users/4242/ada-example', profile_image: 'https://i.sstatic.net/a.png', display_name: 'Ada Example', reputation: 15230, ...over }], has_more: false, quota_max: 300, quota_remaining: 297 });
+const seAnswers = () => ({ items: [
+  { owner: { user_id: 4242, display_name: 'Ada Example' }, is_accepted: true, score: 57, last_activity_date: 1714100000, creation_date: 1714000000, answer_id: 78001, question_id: 77001, content_license: 'CC BY-SA 4.0' },
+  { owner: { user_id: 4242, display_name: 'Ada Example' }, is_accepted: false, score: 12, last_activity_date: 1690100000, creation_date: 1690000000, answer_id: 76002, question_id: 75002, content_license: 'CC BY-SA 4.0' },
+], has_more: true, quota_max: 300, quota_remaining: 296 });
+const seQuestions = () => ({ items: [
+  { tags: ['sql', 'postgresql', 'indexing', 'performance'], is_answered: true, view_count: 5400, accepted_answer_id: 78001, answer_count: 3, score: 40, creation_date: 1713900000, question_id: 77001, content_license: 'CC BY-SA 4.0', link: 'https://stackoverflow.com/questions/77001/why-is-my-composite-index-not-used', title: 'Why is my composite index not used when I filter on the second column?' },
+  { tags: ['typescript', 'generics'], is_answered: true, view_count: 900, answer_count: 2, score: 8, creation_date: 1689900000, question_id: 75002, content_license: 'CC BY-SA 4.0', link: 'https://stackoverflow.com/questions/75002/how-do-i-type-a-builders-chained-methods', title: 'How do I type a builder&#39;s chained methods?' },
+], has_more: false, quota_max: 300, quota_remaining: 295 });
+
+// Speaker pages, as Exa returns them (title, text, extras.links, subpages).
+const PAGES = {
+  'https://noti.st/adaex': { url: 'https://noti.st/adaex', title: 'Ada Example - Notist', text: 'Ada Example\nEngineer. Talks about data tools.', extras: { links: ['https://github.com/adaex', 'https://noti.st/adaex/x9y8z7/indexes-in-practice'] }, subpages: [{ url: 'https://noti.st/adaex/a1b2c3/fast-queries', title: 'Fast Queries by Ada Example', publishedDate: '2025-09-12T00:00:00.000Z', text: 'Presented at Data Days 2025.' }] },
+  'https://sessionize.com/ada-example': { url: 'https://sessionize.com/ada-example', title: "Ada Example's Speaker Profile | Sessionize", text: '# Ada Example\nSoftware Engineer at Contoso\n## Sessions\n### Boring query builders\nWhy fewer features win.\n### Indexes in practice\nA field guide.\n## Events\n### Data Days 2025', extras: { links: ['https://www.linkedin.com/in/ada-example/'] } },
+  'https://speakerdeck.com/ada-example-2': { url: 'https://speakerdeck.com/ada-example-2', title: 'Ada Example (@ada-example-2) on Speaker Deck', text: 'Ada Example, designer at Fabrikam', extras: { links: ['https://speakerdeck.com/ada-example-2/color-systems'] } },
+};
+
 // A fake network: routes by URL, records every call, and answers like the real APIs.
 function fakeNet(over = {}) {
   const calls = [];
   const routes = {
-    exa: (urls) => ({ results: urls.map((u) => (u === PROFILE ? exaProfile() : u.startsWith('https://adaexample.dev') ? exaSite() : null)).filter(Boolean) }),
+    exa: (urls) => ({ results: urls.map((u) => (u === PROFILE ? exaProfile() : u.startsWith('https://adaexample.dev') ? exaSite() : PAGES[u] ?? null)).filter(Boolean) }),
+    exaSearch: () => ({ results: [] }),
     'github:/users/adaex': ghUser,
     'github:/users/adaex/repos': ghRepos,
     'github:/users/adaex/social_accounts': ghSocial,
@@ -101,12 +135,16 @@ function fakeNet(over = {}) {
     let key;
     if (u.host === 'api.exa.ai') {
       const body = JSON.parse(opts.body);
-      return reply(200, routes.exa(body.urls, body));
+      return reply(200, u.pathname === '/search' ? routes.exaSearch(body) : routes.exa(body.urls, body));
     }
+    if (u.host === 'dev.to') key = `dev:${u.pathname}:${u.searchParams.get('url') ?? u.searchParams.get('username')}`;
+    if (u.host.endsWith('medium.com') || u.host.endsWith('substack.com')) key = `feed:${u.host}${u.pathname}`;
+    if (u.host === 'api.stackexchange.com') key = `se:${u.pathname}`;
     if (u.host === 'api.github.com') key = `github:${u.pathname}`;
     if (u.host === 'pub.orcid.org') key = `orcid:${u.pathname.split('/')[2]}`;
     if (u.host === 'api.openalex.org') key = `openalex:${u.searchParams.get('filter').split(':')[1]}`;
     const route = routes[key];
+    if (key?.startsWith('feed:') && typeof route === 'function') return new Response(route(), { status: 200, headers: { 'Content-Type': 'application/rss+xml' } });
     if (typeof route === 'function') return reply(200, route());
     if (route && route.status) return reply(route.status, route.body ?? {}, route.headers);
     return reply(404, { message: 'Not Found' });
@@ -240,7 +278,8 @@ test('a namesake with no link is never looked up', async () => {
   const net = fakeNet({ exa: () => ({ results: [exaProfile({ text: '# Ada Example\n\nEngineer', extras: { links: [] } })] }) });
   const w = await lookup(net);
   assert.deepEqual(w.items, []);
-  assert.equal(net.calls.length, 1, 'only the profile itself was read');
+  assert.ok(net.calls.every((u) => u.startsWith('https://api.exa.ai/')), 'no account was looked up');
+  assert.equal(net.calls.filter((u) => u.endsWith('/contents')).length, 1, 'only the profile itself was read (plus a search of speaker pages)');
 });
 
 test('a linked account whose name contradicts the profile is dropped', async () => {
@@ -277,7 +316,7 @@ test('at most two hops: a site their GitHub links to is not read', async () => {
   });
   const w = await lookup(net);
   assert.ok(w.items.some((it) => it.kind === 'repo'));
-  assert.equal(net.calls.filter((u) => u.includes('api.exa.ai')).length, 1);
+  assert.equal(net.calls.filter((u) => u.endsWith('/contents')).length, 1);
 });
 
 test('"Not them" and the opt-out list are checked before anything is read', async () => {
@@ -436,6 +475,153 @@ test('without an Exa key, real people are not looked up', async () => {
   } finally {
     app.server.close();
   }
+});
+
+// ---------------------------------------------------------------------------
+// Writing, answers and talks
+// ---------------------------------------------------------------------------
+
+test('links: DEV, Medium, Substack, Stack Overflow and speaker pages are recognised', () => {
+  assert.deepEqual(writingAccount('https://dev.to/AdaEx/why-query-builders-1abc'), { platform: 'devto', key: 'adaex', url: 'https://dev.to/adaex' });
+  assert.equal(writingAccount('https://dev.to/t/sql'), null);
+  assert.equal(writingAccount('medium.com/@adaex').feed, 'https://medium.com/feed/@adaex');
+  assert.equal(writingAccount('https://adaex.medium.com/some-post-1').url, 'https://medium.com/@adaex', 'both Medium spellings are one account');
+  assert.equal(writingAccount('https://medium.com/towards-data-science/a-post'), null, 'a publication is not a person');
+  assert.equal(writingAccount('https://adanotes.substack.com/p/x').feed, 'https://adanotes.substack.com/feed');
+  assert.equal(writingAccount('https://on.substack.com'), null);
+  assert.equal(stackOverflowUser('https://stackoverflow.com/users/4242/ada-example'), '4242');
+  assert.equal(stackOverflowUser('https://stackoverflow.com/questions/77001/x'), null);
+  assert.equal(talkPage('https://speakerdeck.com/adaex/fast-queries').profile, 'https://speakerdeck.com/adaex');
+  assert.equal(talkPage('https://noti.st/adaex/a1b2c3/fast-queries').talk, 'https://noti.st/adaex/a1b2c3/fast-queries');
+  assert.equal(talkPage('https://sessionize.com/api/v2/abc/view'), null);
+  assert.equal(speakerName("Ada Example's Speaker Profile | Sessionize"), 'Ada Example');
+  assert.equal(speakerName('Speaker Deck'), '');
+  assert.equal(maybeOwnSite('https://sessionize.com/ada-example', []), false);
+});
+
+test('feeds: RSS and Atom give titles, links, dates and authors, never post bodies', () => {
+  const rss = parseFeed(mediumFeed());
+  assert.equal(rss.title, 'Stories by Ada Example on Medium');
+  assert.equal(rss.items.length, 1);
+  assert.equal(rss.items[0].title, 'Indexes I wish I’d added sooner');
+  assert.equal(rss.items[0].author, 'Ada Example');
+  assert.equal(rss.items[0].date, '2024-12-12T17:11:33.000Z');
+  assert.deepEqual(rss.items[0].categories, ['postgres', 'databases']);
+  assert.doesNotMatch(JSON.stringify(rss), /555-0142|mailto/);
+  const atom = parseFeed('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><title>Ada&apos;s blog</title><author><name>Ada Example</name></author><entry><title type="html">Joins &amp;amp; you</title><link rel="alternate" href="https://adaexample.dev/posts/joins"/><published>2026-02-01T10:00:00Z</published><summary>Short one.</summary><category term="sql"/></entry></feed>');
+  assert.equal(atom.title, "Ada's blog");
+  assert.equal(atom.author, 'Ada Example');
+  assert.deepEqual(atom.items[0], { title: 'Joins & you', url: 'https://adaexample.dev/posts/joins', date: '2026-02-01T10:00:00.000Z', author: '', summary: 'Short one.', categories: ['sql'] });
+});
+
+// Their profile links DEV, Medium, Substack and Stack Overflow; their GitHub lists a Notist page;
+// a search of speaker pages finds a Sessionize profile that links back, and a namesake's that doesn't.
+const writerNet = (over = {}) => fakeNet({
+  exa: (urls) => ({ results: urls.map((u) => (u === PROFILE
+    ? exaProfile({ text: '# Ada Example\n\nSoftware Engineer at Contoso\n\n## About\n\nI write at https://dev.to/adaex and https://medium.com/@adaex, send a newsletter at https://adanotes.substack.com, and answer SQL questions: https://stackoverflow.com/users/4242/ada-example\n\nCode: https://github.com/adaex', extras: { links: [] } })
+    : PAGES[u] ?? null)).filter(Boolean) }),
+  exaSearch: () => ({ results: [{ url: 'https://sessionize.com/ada-example', title: "Ada Example's Speaker Profile | Sessionize" }, { url: 'https://speakerdeck.com/ada-example-2/color-systems', title: 'Color systems - Speaker Deck' }] }),
+  'github:/users/adaex/social_accounts': () => [...ghSocial(), { provider: 'generic', url: 'https://noti.st/adaex' }],
+  'dev:/api/users/by_username:adaex': () => devUser(),
+  'dev:/api/articles:adaex': devArticles,
+  'feed:medium.com/feed/@adaex': mediumFeed,
+  'feed:adanotes.substack.com/feed': substackFeed,
+  'se:/2.3/users/4242': () => seUser(),
+  'se:/2.3/users/4242/answers': seAnswers,
+  'se:/2.3/questions/77001;75002': seQuestions,
+  ...over,
+});
+
+test('writing, answers and talks come only from accounts tied to them, each saying how', async () => {
+  const net = writerNet();
+  const w = await lookup(net);
+  const of = (kind, source) => w.items.filter((it) => it.kind === kind && (!source || it.source === source));
+
+  const dev = of('post', 'DEV');
+  assert.equal(dev.length, 1, "the organization's post on DEV is not theirs");
+  assert.equal(dev[0].title, 'Why query builders should be boring');
+  assert.equal(dev[0].date, '2026-11-16');
+  assert.match(dev[0].detail, /#sql #typescript #opensource · 79 reactions/);
+  assert.equal(dev[0].via, 'Linked on their LinkedIn profile');
+  assert.equal(dev[0].account, 'https://dev.to/adaex');
+
+  const medium = of('post', 'Medium')[0];
+  assert.equal(medium.url, 'https://medium.com/@adaex/indexes-i-wish-id-added-sooner-0126fa5c6ce8', 'tracking query removed');
+  assert.equal(of('post', 'Substack')[0].detail, 'What I check first, and what I ignore');
+
+  const answers = of('answer');
+  assert.deepEqual(answers.map((a) => a.title), ['Why is my composite index not used when I filter on the second column?', 'How do I type a builder\'s chained methods?']);
+  assert.equal(answers[0].url, 'https://stackoverflow.com/a/78001');
+  assert.match(answers[0].detail, /^Score 57 · accepted · \[sql\] \[postgresql\] \[indexing\]$/);
+  assert.match(w.accounts.find((a) => a.kind === 'stackoverflow').label, /15,230 reputation/);
+
+  const talks = of('talk');
+  const notist = talks.find((t) => t.source === 'Notist' && t.title === 'Fast Queries');
+  assert.ok(notist, 'a talk from the Notist page their GitHub lists');
+  assert.equal(notist.detail, 'Data Days 2025');
+  assert.equal(notist.via, 'Linked on their GitHub');
+  const sessionize = talks.filter((t) => t.source === 'Sessionize');
+  assert.ok(sessionize.length >= 1, 'the Sessionize profile found by name links back to their LinkedIn');
+  assert.equal(sessionize[0].via, 'Suggested by the search index, and it links back to them');
+  assert.ok(!talks.some((t) => t.url.includes('ada-example-2')), 'at most two speaker pages, and the ones tied to them come first');
+
+  assert.ok(w.items.length <= 12);
+  for (const kind of ['repo', 'post', 'answer', 'talk']) assert.ok(w.items.some((it) => it.kind === kind), `keeps at least one ${kind}`);
+  assert.doesNotMatch(JSON.stringify(w), /ada@example\.com|555-0142/);
+});
+
+test('a speaker page found by their name is kept only when it links back to them', async () => {
+  const net = writerNet({ 'github:/users/adaex/social_accounts': ghSocial });
+  const w = await lookup(net);
+  const talks = w.items.filter((it) => it.kind === 'talk');
+  assert.deepEqual(talks.map((t) => [t.title, t.source]), [['Boring query builders', 'Sessionize'], ['Indexes in practice', 'Sessionize']]);
+  assert.ok(w.skipped.some((x) => x.url === 'https://speakerdeck.com/ada-example-2'), "the namesake's page names another employer and doesn't link to them");
+  assert.ok(net.calls.some((u) => u === 'https://api.exa.ai/search'));
+});
+
+test('a writing account the search index suggests needs a link back to them', async () => {
+  const net = writerNet({
+    exa: (urls) => ({ results: urls.map((u) => (u === PROFILE ? exaProfile({ text: '# Ada Example\n\nCode: https://github.com/adaex', extras: { links: ['https://medium.com/@ada-example-writes', 'https://dev.to/adaex'] } }) : null)).filter(Boolean) }),
+    'feed:medium.com/feed/@ada-example-writes': () => mediumFeed().replace('@adaex/indexes', '@ada-example-writes/indexes'),
+  });
+  const w = await lookup(net);
+  assert.ok(!w.items.some((it) => it.source === 'Medium'), 'a Medium feed carries no link back to them');
+  assert.ok(w.skipped.some((x) => x.url === 'https://medium.com/@ada-example-writes'));
+  const dev = w.items.find((it) => it.source === 'DEV');
+  assert.equal(dev?.via, 'Suggested by the search index, and it links back to them', 'DEV lists their GitHub');
+});
+
+test('two hops at most: what a GitHub found through their site lists is not read', async () => {
+  const net = writerNet({
+    exa: (urls) => ({ results: urls.map((u) => (u === PROFILE ? exaProfile({ extras: { links: [] } }) : u.startsWith('https://adaexample.dev') ? exaSite() : null)).filter(Boolean) }),
+    'github:/users/adaex/social_accounts': () => [{ provider: 'generic', url: 'https://dev.to/adaex' }],
+  });
+  const w = await lookup(net);
+  assert.ok(w.items.some((it) => it.kind === 'repo'), 'GitHub, linked on their site, is read');
+  assert.ok(!net.calls.some((u) => u.includes('dev.to')), 'DEV would be a third hop');
+});
+
+test('"Not them" on a writing account stops it from being read again', async () => {
+  const net = writerNet();
+  const w = await lookup(net, { blocked: ['https://dev.to/adaex'] });
+  assert.ok(!net.calls.some((u) => u.includes('dev.to')));
+  assert.ok(!w.items.some((it) => it.source === 'DEV'));
+});
+
+test('posts on their own site come from the pages Exa read under it', async () => {
+  const site = exaSite({
+    subpages: [
+      { url: 'https://adaexample.dev/blog', title: 'Blog' },
+      { url: 'https://adaexample.dev/blog/joins-in-practice', title: 'Joins in practice | Ada Example', publishedDate: '2026-06-02T00:00:00.000Z', text: 'How I think about joins. Mail ada@example.com.' },
+      { url: 'https://adaexample.dev/tags/sql', title: 'Posts tagged sql' },
+      { url: 'https://elsewhere.example/post', title: 'Not on their site' },
+    ],
+  });
+  const net = fakeNet({ exa: (urls, body) => ({ results: urls.map((u) => (u === PROFILE ? exaProfile() : u.startsWith('https://adaexample.dev') ? { ...site, asked: body } : null)).filter(Boolean) }) });
+  const w = await lookup(net);
+  const posts = w.items.filter((it) => it.kind === 'post');
+  assert.deepEqual(posts.map((p) => [p.title, p.date, p.source]), [['Joins in practice', '2026-06-02', 'Their website']]);
+  assert.equal(posts[0].detail, 'How I think about joins.');
 });
 
 test('the coffee chat partner gets their work as general themes, never titles or links', async () => {

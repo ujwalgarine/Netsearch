@@ -1,11 +1,11 @@
-// Work and projects: a person's own public work (repos, projects, papers, roles, their site),
-// looked up on the server (lib/enrich.js) only through accounts they linked themselves, and kept
-// on the map with the person. Shown in the map's person panel and on the Connections page.
+// Work and projects: a person's own public work (repos, projects, papers, roles, their site, posts,
+// Stack Overflow answers and talks), looked up on the server (lib/enrich.js) only through accounts
+// they linked themselves, and kept on the map with the person. Shown in the map's person panel and on the Connections page.
 // Uses app.js globals: state, undoStack, viewSeq, conversationId, findBranch, flushSave, save,
 // putMap, snapshot, commit, post, el, button, iconButton, toast, copyText, $.
 
 const WORK_TTL_MS = 30 * 86_400_000; // looked up again after 30 days
-const WORK_KIND = { repo: 'Repo', project: 'Project', paper: 'Paper', role: 'Role', site: 'Website' };
+const WORK_KIND = { repo: 'Repo', project: 'Project', paper: 'Paper', role: 'Role', site: 'Website', post: 'Post', answer: 'Answer', talk: 'Talk' };
 const workBusy = new Set();   // person ids being looked up
 const workErrors = new Map(); // person id -> message from the last try
 let workTimer = 0;
@@ -129,7 +129,7 @@ function workPanelContent(branchId, p) {
     out.push(el('p', 'work-note', `Left out ${w.skipped.length === 1 ? 'a linked account' : `${w.skipped.length} linked accounts`} that didn't look like them.`));
   }
   if (w.notes?.length) {
-    const what = { Profile: 'their profile page', Website: 'their website', 'Talking points': 'the openers' };
+    const what = { Profile: 'their profile page', Website: 'their website', Talks: 'speaker pages', 'Talking points': 'the openers' };
     const names = [...new Set(w.notes.map((n) => n.split(':')[0]))].map((n) => what[n] ?? n);
     out.push(el('p', 'work-note', `Couldn't read ${names.join(' or ')} this time, so this may be incomplete. Check again later.`));
   }

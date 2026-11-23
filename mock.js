@@ -72,10 +72,12 @@ export function mockWork({ blocked = [], now = new Date() } = {}) {
     fetched_at: now.toISOString(),
     items: blocked.includes('demo') ? [] : [
       { kind: 'repo', title: 'sample/onboarding-checklist', url: null, date: day(12), detail: 'Placeholder repo · TypeScript · ★ 42', source: 'Demo', via, account: 'demo' },
+      { kind: 'post', title: 'A sample post on what makes onboarding stick', url: null, date: day(40), detail: 'Placeholder post · #onboarding #product', source: 'Demo', via, account: 'demo' },
+      { kind: 'talk', title: 'A sample conference talk', url: null, date: day(120), detail: 'Placeholder event', source: 'Demo', via, account: 'demo' },
       { kind: 'paper', title: 'A sample paper on measuring product onboarding', url: null, date: day(200), detail: 'Placeholder venue · 3 citations', source: 'Demo', via, account: 'demo' },
     ],
     accounts: [],
-    talking_points: blocked.includes('demo') ? [] : ['With EXA_API_KEY set, this shows openers about their real projects and papers, from accounts they linked themselves.'],
+    talking_points: blocked.includes('demo') ? [] : ['With EXA_API_KEY set, this shows openers about their real projects, papers, posts and talks, from accounts they linked themselves.'],
     themes: blocked.includes('demo') ? [] : ['Builds and shares open-source software', 'Publishes research papers'],
     blocked,
     skipped: [],
