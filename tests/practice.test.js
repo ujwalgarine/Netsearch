@@ -5,7 +5,7 @@
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { configured, makeEmail, signUp as signUpAs, deleteAccounts, startServer } from './helpers.js';
-import { validateReport, cleanReport, mockReport, isVerbatim, RUBRIC, MOCK_LINES } from '../lib/practice.js';
+import { validateReport, cleanReport, mockReport, isVerbatim, RUBRIC, MOCK_LINES, scoreOutOf10, savedReport, summarize } from '../lib/practice.js';
 
 let server;
 const created = [];
@@ -229,5 +229,15 @@ describe('Practice report checks (no server)', () => {
     assert.ok(validateReport({ ...r, extra: true }).length);
     assert.ok(validateReport({ ...r, strengths: ['only one'] }).length);
     assert.ok(validateReport({ ...r, rubric: { ...r.rubric, opening: { score: 3, note: 'no evidence key' } } }).length);
+  });
+
+  test('chats scored out of 100 by the earlier voice coffee chat show on the 10-point scale, without their old report', () => {
+    assert.deepEqual([62, 31, 7, 9.5, 0, 105].map(scoreOutOf10), [6.2, 3.1, 7, 9.5, 0, 10]);
+    assert.equal(scoreOutOf10(null), null);
+    assert.equal(summarize({ id: 'x', status: 'completed', score: 31 }).score, 3.1);
+    const r = mockReport(scenario, user);
+    assert.equal(savedReport(r), r);
+    assert.equal(savedReport({ overall: { score: 31, grade: 'C' }, metrics: [], summary: 'old' }), null);
+    assert.equal(savedReport(null), null);
   });
 });

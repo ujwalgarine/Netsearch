@@ -273,7 +273,8 @@ app.get('/api/practice/:id', wrap(async (req, res) => {
     talking_points: s.scenario_json?.talking_points ?? [],
     turns_used: messages.filter((m) => m.role === 'user').length,
     messages,
-    report: s.feedback_json ?? null,
+    report: practice.savedReport(s.feedback_json),
+    earlier_version: Boolean(s.feedback_json) && !practice.savedReport(s.feedback_json),
   });
 }));
 
